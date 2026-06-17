@@ -20,6 +20,11 @@ class Settings(BaseSettings):
         alias="AGENTPRO_CORS_ORIGINS",
     )
     docs_enabled: bool = True
+    database_url: str = "sqlite+aiosqlite:///./agentpro_local.db"
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    jwt_secret: str = "CHANGE_ME_LOCAL_ONLY"
+    access_token_minutes: int = 30
+    refresh_token_days: int = 30
 
     @property
     def cors_origins(self) -> list[str]:

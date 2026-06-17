@@ -42,17 +42,35 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：
+  - 哈希：a8c9b0e
   - 信息：初始化 Python 后端项目骨架与健康检查接口
 
 ### 2. 数据库与迁移
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 新增 SQLAlchemy 2.x 异步数据库会话层
+  - 新增 Alembic 配置和初始迁移
+  - 建立 users、email_verification_codes、refresh_tokens、model_provider_configs、requirements、conversation_messages、requirement_decisions、agent_specs、agent_graph_runs、dev_jobs、dev_job_events、dev_job_artifacts、review_reports、review_findings、audit_logs 核心表
+  - `.env.example` 保持占位配置，不写入真实阿里云数据库凭据
+  - 新增数据库元数据和建表测试
 - 相关文件：
+  - backend/app/db/base.py
+  - backend/app/db/session.py
+  - backend/app/db/models.py
+  - backend/alembic.ini
+  - backend/alembic/env.py
+  - backend/alembic/versions/20260617_0001_initial_schema.py
+  - backend/tests/test_database.py
+  - backend/.env.example
 - 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成 MySQL 数据库模型与迁移基础设施
 
 ### 3. 登录注册与腾讯云 SMTP
 - 状态：未开始
