@@ -328,17 +328,38 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
-  - 哈希：
+  - 哈希：dc19c37
   - 信息：完成 Mock 数据集中维护与页面交互串联
 
 ### 15. 后端 API 类型与服务层占位
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - API client 占位
+  - 登录注册服务占位
+  - 模型配置服务占位
+  - AgentSpec 与需求服务占位
+  - Runner 调度服务占位
+  - 自动评审服务占位
+  - 无后端地址时自动使用 mock fallback
 - 相关文件：
+  - src/services/apiClient.ts
+  - src/services/types.ts
+  - src/services/authService.ts
+  - src/services/modelService.ts
+  - src/services/agentSpecService.ts
+  - src/services/runnerService.ts
+  - src/services/reviewService.ts
+  - src/services/index.ts
+  - src/vite-env.d.ts
 - 验证结果：
+  - 服务层仅定义前端调用边界和 mock fallback
+  - 未写入云数据库连接信息、数据库账号密码或真实 API Key
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成后端 API 类型与服务层占位
 
 ### 16. 构建、检查、最终整理
 - 状态：未开始
