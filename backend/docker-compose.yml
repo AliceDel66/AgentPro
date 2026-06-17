@@ -4,10 +4,14 @@ services:
       context: .
     env_file:
       - .env
+    environment:
+      AGENTPRO_REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
       - redis
+    volumes:
+      - agentpro_api_logs:/app/logs
     restart: unless-stopped
 
   redis:
@@ -19,3 +23,4 @@ services:
 
 volumes:
   agentpro_redis:
+  agentpro_api_logs:

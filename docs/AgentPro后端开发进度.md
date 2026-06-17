@@ -241,14 +241,27 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：
+  - 哈希：2976e49
   - 信息：完成自动评审报告生成与前端对接
 
 ### 10. Docker 部署
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 调整 Dockerfile 为生产运行镜像，复制 app、alembic 和迁移配置
+  - docker-compose 配置 api、redis、日志卷和 Redis 内部连接
+  - 新增后端部署文档，说明 `/opt/agentpro`、`.env`、迁移和健康检查流程
+  - 文档仅使用占位符，不记录真实数据库、SMTP、服务器密码或 API Key
 - 相关文件：
+  - backend/Dockerfile
+  - backend/docker-compose.yml
+  - docs/AgentPro后端部署.md
 - 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 未运行 Docker 镜像构建：本机未安装 docker 命令
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成 Docker 部署配置与服务器上线文档
