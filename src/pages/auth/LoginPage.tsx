@@ -27,7 +27,7 @@ export function LoginPage({ navigate }: LoginPageProps) {
           <button
             className="mt-1 rounded-lg bg-agent-primary px-5 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-agent-primaryHover"
             type="button"
-            onClick={() => navigate("chat")}
+            onClick={() => navigate("setup")}
           >
             登 录
           </button>

@@ -82,17 +82,31 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
-  - 哈希：
+  - 哈希：27b91a1
   - 信息：完成登录注册页面与基础路由
 
 ### 4. 模型配置模块
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - sub2api 推荐服务商卡片
+  - OpenAI Compatible 与自定义服务占位卡片
+  - Base URL、API Key、默认模型表单
+  - 测试连接按钮与模型列表自动获取状态
+  - 配置说明侧栏
 - 相关文件：
+  - src/pages/setup/SetupPage.tsx
+  - src/App.tsx
+  - src/pages/auth/LoginPage.tsx
 - 验证结果：
+  - 页面按设计稿顶部栏、服务商卡片、配置卡片与说明卡实现
+  - 真实模型连接暂未接入，当前为前端 mock 流程
+  - 密钥字段仅为本地输入占位，未写入真实 API Key
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成模型配置页面与 sub2api 连接表单
 
 ### 5. 应用 Shell 与导航模块
 - 状态：未开始
