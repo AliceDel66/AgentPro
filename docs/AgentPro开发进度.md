@@ -56,17 +56,34 @@
   - 依赖安装完成
   - 构建将在页面模块完成后统一运行
 - Commit：
-  - 哈希：
+  - 哈希：346c173
   - 信息：完成全局主题与设计 token 配置
 
 ### 3. 登录注册模块
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 登录页
+  - 注册页
+  - 找回密码页
+  - 邮箱验证码输入与倒计时展示状态
+  - 密码强度展示
+  - Auth 页面基础路由切换
 - 相关文件：
+  - src/components/layout/AuthLayout.tsx
+  - src/components/common/TextField.tsx
+  - src/pages/auth/LoginPage.tsx
+  - src/pages/auth/RegisterPage.tsx
+  - src/pages/auth/ForgotPasswordPage.tsx
+  - src/App.tsx
 - 验证结果：
+  - 页面按设计稿左右分栏结构实现
+  - 暂未接入真实认证 API，当前为前端 mock 流程
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成登录注册页面与基础路由
 
 ### 4. 模型配置模块
 - 状态：未开始
