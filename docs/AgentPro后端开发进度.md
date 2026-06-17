@@ -69,17 +69,37 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：
+  - 哈希：7202695
   - 信息：完成 MySQL 数据库模型与迁移基础设施
 
 ### 3. 登录注册与腾讯云 SMTP
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 实现邮箱验证码发送接口，本地/测试环境不依赖真实 SMTP
+  - 验证码仅存哈希，支持过期时间和发送冷却限制
+  - 实现邮箱验证码注册、账号/邮箱密码登录、JWT access token、refresh token、刷新、注销和 `/me`
+  - 密码使用 Argon2 哈希，refresh token 仅存哈希
+  - 腾讯云 SMTP 配置全部通过环境变量注入
+  - 前端 authService 改为会话结构，apiClient 支持统一响应解包和 `/api/v1` 前缀
 - 相关文件：
+  - backend/app/modules/auth/router.py
+  - backend/app/modules/auth/schemas.py
+  - backend/app/modules/email/service.py
+  - backend/app/core/security.py
+  - backend/tests/test_auth.py
+  - backend/tests/conftest.py
+  - src/services/apiClient.ts
+  - src/services/authService.ts
+  - src/services/types.ts
 - 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成邮箱验证码注册登录与 JWT 会话
 
 ### 4. 模型配置
 - 状态：未开始

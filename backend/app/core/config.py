@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     jwt_secret: str = "CHANGE_ME_LOCAL_ONLY"
     access_token_minutes: int = 30
     refresh_token_days: int = 30
+    email_code_expire_minutes: int = 10
+    email_code_cooldown_seconds: int = 60
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "AgentPro <noreply@example.com>"
 
     @property
     def cors_origins(self) -> list[str]:

@@ -13,6 +13,20 @@ export interface AuthUser {
   emailVerified: boolean;
 }
 
+export interface AuthSession {
+  user: AuthUser;
+  accessToken: string;
+  refreshToken: string;
+  tokenType: "bearer";
+  expiresIn: number;
+}
+
+export interface EmailCodeResult {
+  sent: boolean;
+  cooldownSeconds: number;
+  debugCode?: string;
+}
+
 export interface ModelProviderConfig {
   provider: "sub2api" | "openai-compatible" | "custom";
   baseUrl: string;
