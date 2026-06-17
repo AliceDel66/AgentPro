@@ -197,17 +197,29 @@
   - 已通过 cd src-tauri && cargo check
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：
+  - 哈希：b2696e1
   - 信息：完成本地 Runner 协议与 Tauri 命令桥对接
 
 ### 8. 并行开发监控
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 新增 `/dev-jobs/{id}/stream` SSE 状态流
+  - SSE 输出 snapshot、log、heartbeat 事件，可用于前端监控页实时日志
+  - 复用 dev job events 作为持久化日志来源
+  - 前端 runnerService 新增 stream path 辅助函数
 - 相关文件：
+  - backend/app/modules/runner/router.py
+  - backend/tests/test_runner.py
+  - src/services/runnerService.ts
 - 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成并行开发监控与实时日志接口
 
 ### 9. 自动评审
 - 状态：未开始

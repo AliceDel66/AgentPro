@@ -33,3 +33,7 @@ export function appendRunnerArtifact(
 ) {
   return apiPost(`/dev-jobs/${jobId}/artifacts`, artifact, { id: "artifact_mock_001" });
 }
+
+export function getRunnerJobStreamPath(jobId: string) {
+  return `/dev-jobs/${jobId}/stream`;
+}

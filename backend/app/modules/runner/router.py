@@ -1,6 +1,8 @@
+import json
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -185,3 +187,35 @@ async def list_dev_job_events(
             for event in result.scalars().all()
         ]
     )
+
+
+@router.get("/{job_id}/stream")
+async def stream_dev_job(
+    job_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    job = await get_owned_job(job_id, session, current_user)
+    result = await session.execute(
+        select(DevJobEvent)
+        .where(DevJobEvent.job_id == job.id)
+        .order_by(DevJobEvent.created_at.asc())
+    )
+    events = list(result.scalars().all())
+
+    async def event_stream():
+        snapshot = serialize_job(job).model_dump()
+        yield f"event: snapshot\ndata: {json.dumps(snapshot, ensure_ascii=False)}\n\n"
+        for event in events:
+            payload = {
+                "id": event.id,
+                "level": event.level,
+                "phase": event.phase,
+                "message": event.message,
+                "payload": event.payload,
+                "createdAt": event.created_at.isoformat(),
+            }
+            yield f"event: log\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        yield 'event: heartbeat\ndata: {"ok": true}\n\n'
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
