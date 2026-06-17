@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-ssr/
 target/
+src-tauri/gen/
 .DS_Store
 .env
 .env.*
@@ -14,4 +15,3 @@ coverage/
 playwright-report/
 test-results/
 *.local
-

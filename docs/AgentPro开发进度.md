@@ -372,12 +372,22 @@
 - 相关文件：
   - README.md
   - docs/AgentPro开发进度.md
+  - .gitignore
+  - src-tauri/build.rs
+  - src-tauri/icons/icon.png
+  - src-tauri/src/lib.rs
+  - src-tauri/src/main.rs
 - 验证结果：
   - 已通过 npm run typecheck
   - 已通过 npm run build
   - 已通过 npm run lint
   - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
+  - 已补齐 Tauri v2 库入口，修复 cargo metadata 缺少 agentpro_lib 的问题
+  - 已补齐 Tauri build script，修复 generate_context 缺少 OUT_DIR 的问题
+  - 已补齐 Tauri 默认图标资源
+  - 已通过 npm run tauri -- build，产物位于 src-tauri/target/release/agentpro
   - Playwright 未作为项目依赖安装，浏览器截图验收需后续单独接入或使用外部浏览器工具
 - Commit：
   - 哈希：27b861f
   - 信息：完成构建检查与最终整理
+  - 补充记录：b56641b 补齐最终进度提交记录
