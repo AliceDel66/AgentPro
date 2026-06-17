@@ -9,6 +9,7 @@ import { DispatchPage } from "./pages/workspace/DispatchPage";
 import { FollowupPage } from "./pages/workspace/FollowupPage";
 import { LibraryPage } from "./pages/workspace/LibraryPage";
 import { MonitorPage } from "./pages/workspace/MonitorPage";
+import { ReviewPage } from "./pages/workspace/ReviewPage";
 import { SpecPage } from "./pages/workspace/SpecPage";
 import { ShellPlaceholder } from "./pages/workspace/ShellPlaceholder";
 import type { AppRoute } from "./types";
@@ -34,6 +35,8 @@ export default function App() {
           <DispatchPage navigate={setRoute} />
         ) : route === "monitor" ? (
           <MonitorPage navigate={setRoute} />
+        ) : route === "review" ? (
+          <ReviewPage navigate={setRoute} />
         ) : (
           <ShellPlaceholder route={route} />
         )}
