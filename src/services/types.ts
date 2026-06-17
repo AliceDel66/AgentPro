@@ -56,6 +56,15 @@ export interface RequirementDetail extends AgentRequirement {
   graphRunId?: string;
 }
 
+export interface AgentSpecDraft {
+  id: string;
+  requirementId: string;
+  version: number;
+  title: string;
+  status: string;
+  body: Record<string, unknown>;
+}
+
 export interface RunnerRequest {
   specId: string;
   strategy: "codex" | "claude-code" | "parallel";

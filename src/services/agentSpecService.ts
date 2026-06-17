@@ -1,6 +1,6 @@
 import { requirementLibraryRows } from "../lib/mockData";
 import { apiGet, apiPost } from "./apiClient";
-import type { AgentRequirement, RequirementDetail } from "./types";
+import type { AgentRequirement, AgentSpecDraft, RequirementDetail } from "./types";
 
 const mockRequirements: AgentRequirement[] = requirementLibraryRows.map((row, index) => ({
   id: `req_mock_${index + 1}`,
@@ -60,6 +60,32 @@ export function confirmRequirementFollowups(requirementId: string, decisions: Ar
   } satisfies RequirementDetail);
 }
 
-export function approveAgentSpec(specId: string) {
-  return apiPost("/agent-spec/approve", { specId }, { approved: true });
+export function generateAgentSpec(requirementId: string) {
+  return apiPost<object, AgentSpecDraft>(`/requirements/${requirementId}/spec/generate`, {}, {
+    id: "spec_mock_001",
+    requirementId,
+    version: 1,
+    title: "AgentSpec 草案",
+    status: "draft",
+    body: {}
+  });
+}
+
+export function getAgentSpec(requirementId: string) {
+  return apiGet<AgentSpecDraft>(`/requirements/${requirementId}/spec`, {
+    id: "spec_mock_001",
+    requirementId,
+    version: 1,
+    title: "AgentSpec 草案",
+    status: "draft",
+    body: {}
+  });
+}
+
+export function approveAgentSpec(requirementId: string) {
+  return apiPost(`/requirements/${requirementId}/approve`, {}, { approved: true });
+}
+
+export function archiveRequirement(requirementId: string) {
+  return apiPost(`/requirements/${requirementId}/archive`, {}, { archived: true });
 }

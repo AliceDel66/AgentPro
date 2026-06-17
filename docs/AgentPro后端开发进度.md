@@ -148,17 +148,31 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：
+  - 哈希：51b2ad2
   - 信息：完成 LangGraph 需求访谈与反问确认流程
 
 ### 6. AgentSpec 与需求库
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 实现 AgentSpec 生成、读取、审批和需求归档接口
+  - AgentSpec 草案来自 RequirementGraph 最新快照，并包含安全评审和审批检查清单
+  - 需求库列表支持按当前用户读取并返回前端现有 AgentRequirement 结构
+  - 前端服务层新增 generateAgentSpec、getAgentSpec、approveAgentSpec、archiveRequirement
 - 相关文件：
+  - backend/app/modules/requirements/router.py
+  - backend/app/modules/requirements/schemas.py
+  - backend/tests/test_requirements.py
+  - src/services/agentSpecService.ts
+  - src/services/types.ts
 - 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成 AgentSpec 草案审批与需求库接口
 
 ### 7. 本地 Runner 协议与 Tauri 命令桥
 - 状态：未开始

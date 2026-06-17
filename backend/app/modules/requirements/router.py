@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.responses import ok
 from app.db.models import (
     AgentGraphRun,
+    AgentSpec,
     ConversationMessage,
     Requirement,
     RequirementDecision,
@@ -16,8 +17,10 @@ from app.db.session import get_db_session
 from app.modules.auth.router import get_current_user
 from app.modules.requirements.graph import RequirementGraphState, run_requirement_graph
 from app.modules.requirements.schemas import (
+    AgentSpecPayload,
     ConversationMessagePayload,
     FollowupConfirmRequest,
+    RequirementActionResponse,
     RequirementCreate,
     RequirementDetail,
     RequirementListItem,
@@ -101,6 +104,74 @@ def assistant_followup_text(graph_state: RequirementGraphState) -> str:
     lines = ["我整理了几个需要你确认的问题："]
     lines.extend(f"{index}. {item['question']}" for index, item in enumerate(questions, start=1))
     return "\n".join(lines)
+
+
+def serialize_spec(spec: AgentSpec) -> AgentSpecPayload:
+    return AgentSpecPayload(
+        id=spec.id,
+        requirementId=spec.requirement_id,
+        version=spec.version,
+        title=spec.title,
+        status=spec.status,
+        body=spec.body,
+    )
+
+
+async def latest_graph_state(
+    session: AsyncSession,
+    requirement: Requirement,
+) -> RequirementGraphState:
+    result = await session.execute(
+        select(AgentGraphRun)
+        .where(AgentGraphRun.requirement_id == requirement.id)
+        .order_by(AgentGraphRun.updated_at.desc())
+    )
+    graph_run = result.scalars().first()
+    if graph_run:
+        return graph_run.state_snapshot
+
+    messages = await load_messages(session, requirement.id)
+    return run_requirement_graph(
+        [{"role": message.role, "content": message.content} for message in messages]
+    )
+
+
+async def latest_spec(session: AsyncSession, requirement_id: str) -> AgentSpec | None:
+    result = await session.execute(
+        select(AgentSpec)
+        .where(AgentSpec.requirement_id == requirement_id)
+        .order_by(AgentSpec.version.desc(), AgentSpec.updated_at.desc())
+    )
+    return result.scalars().first()
+
+
+async def create_spec_from_requirement(
+    session: AsyncSession,
+    requirement: Requirement,
+) -> AgentSpec:
+    graph_state = await latest_graph_state(session, requirement)
+    current = await latest_spec(session, requirement.id)
+    spec = AgentSpec(
+        requirement_id=requirement.id,
+        version=(current.version + 1) if current else 1,
+        title=f"{requirement.title} AgentSpec",
+        status="draft",
+        body={
+            **graph_state.get("specDraft", {}),
+            "requirementId": requirement.id,
+            "safetyReview": graph_state.get("safetyReview", {}),
+            "approvalChecklist": [
+                "目标用户和使用场景已确认",
+                "工具权限和高风险动作已确认",
+                "失败兜底和人工介入路径已确认",
+                "评审指标和验收标准已确认",
+            ],
+        },
+    )
+    requirement.status = "spec_draft"
+    session.add(spec)
+    await session.flush()
+    return spec
 
 
 async def build_detail(
@@ -268,3 +339,62 @@ async def confirm_followups(
     graph_run = await persist_graph_run(session, requirement, graph_state)
     await session.commit()
     return ok(await build_detail(session, requirement, graph_state, graph_run.id))
+
+
+@router.post("/{requirement_id}/spec/generate")
+async def generate_spec(
+    requirement_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = await get_owned_requirement(requirement_id, session, current_user)
+    spec = await create_spec_from_requirement(session, requirement)
+    await session.commit()
+    return ok(serialize_spec(spec))
+
+
+@router.get("/{requirement_id}/spec")
+async def get_spec(
+    requirement_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = await get_owned_requirement(requirement_id, session, current_user)
+    spec = await latest_spec(session, requirement.id)
+    if not spec:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AgentSpec not found")
+    return ok(serialize_spec(spec))
+
+
+@router.post("/{requirement_id}/approve")
+async def approve_requirement(
+    requirement_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = await get_owned_requirement(requirement_id, session, current_user)
+    spec = await latest_spec(session, requirement.id)
+    if not spec:
+        spec = await create_spec_from_requirement(session, requirement)
+    spec.status = "approved"
+    requirement.status = "approved"
+    await session.commit()
+    return ok(
+        RequirementActionResponse(
+            id=requirement.id,
+            status=requirement.status,
+            spec=serialize_spec(spec),
+        )
+    )
+
+
+@router.post("/{requirement_id}/archive")
+async def archive_requirement(
+    requirement_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = await get_owned_requirement(requirement_id, session, current_user)
+    requirement.status = "archived"
+    await session.commit()
+    return ok(RequirementActionResponse(id=requirement.id, status=requirement.status))

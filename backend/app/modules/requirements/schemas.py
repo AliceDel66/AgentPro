@@ -48,3 +48,18 @@ class RequirementDetail(BaseModel):
     decisions: list[dict[str, Any]]
     safetyReview: dict[str, Any]
     graphRunId: str | None = None
+
+
+class AgentSpecPayload(BaseModel):
+    id: str
+    requirementId: str
+    version: int
+    title: str
+    status: str
+    body: dict[str, Any]
+
+
+class RequirementActionResponse(BaseModel):
+    id: str
+    status: str
+    spec: AgentSpecPayload | None = None

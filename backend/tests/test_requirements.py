@@ -61,3 +61,38 @@ async def test_requirement_interview_flow(api_client: AsyncClient) -> None:
     list_response = await api_client.get("/api/v1/requirements", headers=headers)
     assert list_response.status_code == 200
     assert list_response.json()["data"][0]["title"] == "电商售后客服 Agent"
+
+    spec_response = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/spec/generate",
+        headers=headers,
+        json={},
+    )
+    assert spec_response.status_code == 200
+    spec = spec_response.json()["data"]
+    assert spec["requirementId"] == requirement_id
+    assert spec["status"] == "draft"
+    assert "approvalChecklist" in spec["body"]
+
+    get_spec_response = await api_client.get(
+        f"/api/v1/requirements/{requirement_id}/spec",
+        headers=headers,
+    )
+    assert get_spec_response.status_code == 200
+    assert get_spec_response.json()["data"]["id"] == spec["id"]
+
+    approve_response = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/approve",
+        headers=headers,
+        json={},
+    )
+    assert approve_response.status_code == 200
+    assert approve_response.json()["data"]["status"] == "approved"
+    assert approve_response.json()["data"]["spec"]["status"] == "approved"
+
+    archive_response = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/archive",
+        headers=headers,
+        json={},
+    )
+    assert archive_response.status_code == 200
+    assert archive_response.json()["data"]["status"] == "archived"
