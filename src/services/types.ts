@@ -42,6 +42,20 @@ export interface AgentRequirement {
   route?: AppRoute;
 }
 
+export interface RequirementDetail extends AgentRequirement {
+  summary?: string;
+  messages: Array<{
+    id: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    createdAt: string;
+  }>;
+  followupQuestions: Array<Record<string, unknown>>;
+  decisions: Array<Record<string, unknown>>;
+  safetyReview: Record<string, unknown>;
+  graphRunId?: string;
+}
+
 export interface RunnerRequest {
   specId: string;
   strategy: "codex" | "claude-code" | "parallel";

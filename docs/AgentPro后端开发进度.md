@@ -124,17 +124,32 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：
+  - 哈希：1801202
   - 信息：完成模型配置与模型列表接口对接
 
 ### 5. LangGraph 需求访谈
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 新增 RequirementGraph，包含 intake_summary、gap_analysis、followup_questions、decision_merge、spec_draft、safety_review、approval_wait 节点
+  - 实现需求创建、多轮消息追加、主动反问生成、反问确认归纳
+  - 每次 graph run 写入 agent_graph_runs.state_snapshot，需求成熟度和状态同步更新
+  - 前端需求服务层接入 `/requirements`、`/messages`、`/followups/confirm`
 - 相关文件：
+  - backend/app/modules/requirements/graph.py
+  - backend/app/modules/requirements/router.py
+  - backend/app/modules/requirements/schemas.py
+  - backend/tests/test_requirements.py
+  - src/services/agentSpecService.ts
+  - src/services/types.ts
 - 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成 LangGraph 需求访谈与反问确认流程
 
 ### 6. AgentSpec 与需求库
 - 状态：未开始
