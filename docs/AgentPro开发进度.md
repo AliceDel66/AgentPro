@@ -34,17 +34,30 @@
   - 已完成 npm install 并生成 package-lock.json
   - 该板块暂未运行构建，等待页面和主题落地后统一验证
 - Commit：
-  - 哈希：待提交后补充
+  - 哈希：5a97085
   - 信息：初始化 AgentPro 桌面端项目骨架
 
 ### 2. 全局主题、HeroUI、Tailwind、设计 token
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 从设计稿抽取 AgentPro 全局颜色、字体、阴影、尺寸 token
+  - 配置 Tailwind 与 HeroUI 插件
+  - 新增通用 Button、Card、StatusChip 组件
+  - 新增输入框、标签、说明 pill 的全局样式
 - 相关文件：
+  - tailwind.config.ts
+  - src/styles.css
+  - src/lib/designTokens.ts
+  - src/components/common/Button.tsx
+  - src/components/common/Card.tsx
+  - src/components/common/StatusChip.tsx
 - 验证结果：
+  - 主题配置已落地
+  - 依赖安装完成
+  - 构建将在页面模块完成后统一运行
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成全局主题与设计 token 配置
 
 ### 3. 登录注册模块
 - 状态：未开始

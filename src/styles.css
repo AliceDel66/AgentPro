@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -65,3 +67,31 @@ select {
   }
 }
 
+.agent-input {
+  width: 100%;
+  border: 1px solid #d9e6f5;
+  background: #fafcfe;
+  color: #0b1220;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.agent-input:focus {
+  border-color: #155eef;
+  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.08);
+}
+
+.agent-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #344054;
+}
+
+.agent-help-pill {
+  border-radius: 4px;
+  background: #f0f4fa;
+  padding: 2px 8px;
+  color: #8b9bb5;
+  font-size: 11px;
+}
