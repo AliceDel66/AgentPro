@@ -105,17 +105,30 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
-  - 哈希：
+  - 哈希：d68b92c
   - 信息：完成模型配置页面与 sub2api 连接表单
 
 ### 5. 应用 Shell 与导航模块
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 56px 图标侧栏
+  - 顶部栏与当前页面标题
+  - 工作台路由容器
+  - 需求访谈、需求草案、需求库、开发调度、并行监控、自动评审、设置导航入口
+  - 后续页面占位承接
 - 相关文件：
+  - src/components/layout/AppShell.tsx
+  - src/pages/workspace/ShellPlaceholder.tsx
+  - src/App.tsx
 - 验证结果：
+  - AppShell 已按设计稿 56px 侧栏与 50px 顶部栏实现
+  - 当前仅为页面壳层，业务页面将在后续板块替换占位内容
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成应用 Shell 与统一导航
 
 ### 6. 需求访谈与反问确认模块
 - 状态：未开始
