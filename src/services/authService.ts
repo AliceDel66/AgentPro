@@ -28,6 +28,11 @@ export function registerWithEmail(email: string, code: string, password: string,
   return apiPost("/auth/register", { email, code, password, name }, mockSession);
 }
 
+export function persistAuthSession(session: AuthSession) {
+  localStorage.setItem("agentpro.accessToken", session.accessToken);
+  localStorage.setItem("agentpro.refreshToken", session.refreshToken);
+}
+
 export function refreshSession(refreshToken: string) {
   return apiPost("/auth/refresh", { refreshToken }, mockSession);
 }

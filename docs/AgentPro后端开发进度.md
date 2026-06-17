@@ -98,17 +98,34 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：
+  - 哈希：3634282
   - 信息：完成邮箱验证码注册登录与 JWT 会话
 
 ### 4. 模型配置
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 实现模型配置读取、保存、连接测试和模型列表接口
+  - 支持 sub2api、OpenAI-compatible、custom 三类配置
+  - API Key 使用后端 Fernet 加密存储，前端只返回 secretSaved 状态
+  - 前端 modelService 改为 PUT `/model/config`，新增 testModelConfig
+  - 前端 apiClient 支持自动携带本地 access token
 - 相关文件：
+  - backend/app/modules/models/router.py
+  - backend/app/modules/models/schemas.py
+  - backend/app/core/crypto.py
+  - backend/tests/test_model_config.py
+  - src/services/modelService.ts
+  - src/services/apiClient.ts
+  - src/services/authService.ts
 - 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成模型配置与模型列表接口对接
 
 ### 5. LangGraph 需求访谈
 - 状态：未开始
