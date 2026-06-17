@@ -1,30 +1,11 @@
 import { Plus } from "lucide-react";
 import { StatusChip } from "../../components/common/StatusChip";
-import type { AppRoute, Navigate } from "../../types";
+import { libraryFilters, requirementLibraryRows } from "../../lib/mockData";
+import type { Navigate } from "../../types";
 
 interface LibraryPageProps {
   navigate: Navigate;
 }
-
-const filters = ["全部 (5)", "草稿 (1)", "已审批 (1)", "开发中 (1)", "评审中 (1)", "已归档 (1)"];
-
-const rows: Array<{
-  title: string;
-  status: string;
-  tone: "blue" | "gray" | "cyan" | "purple" | "green";
-  updated: string;
-  maturity: string;
-  maturityTone?: string;
-  method: string;
-  score: string;
-  route?: AppRoute;
-}> = [
-  { title: "自动客服 Agent", status: "评审中", tone: "purple", updated: "2 小时前", maturity: "87%", method: "Codex + Claude", score: "82", route: "review" },
-  { title: "数据报表生成器", status: "开发中", tone: "cyan", updated: "5 小时前", maturity: "64%", method: "Claude Code", score: "—", route: "monitor" },
-  { title: "智能排班助手", status: "已审批", tone: "blue", updated: "1 天前", maturity: "92%", method: "待选择", score: "—", route: "dispatch" },
-  { title: "库存预警 Agent", status: "草稿", tone: "gray", updated: "3 天前", maturity: "35%", method: "—", score: "—", route: "chat" },
-  { title: "供应商沟通 Agent", status: "已归档", tone: "green", updated: "1 周前", maturity: "100%", maturityTone: "text-agent-success", method: "Codex", score: "91" }
-];
 
 const columns = "grid-cols-[2.2fr_100px_100px_80px_120px_80px]";
 
@@ -43,7 +24,7 @@ export function LibraryPage({ navigate }: LibraryPageProps) {
       </div>
 
       <div className="mb-[22px] flex flex-wrap gap-2">
-        {filters.map((filter, index) => (
+        {libraryFilters.map((filter, index) => (
           <button
             className={`rounded-[10px] px-[18px] py-[7px] text-[13px] font-medium ${
               index === 0 ? "bg-agent-primary text-white" : "border border-agent-border bg-white text-agent-muted hover:border-agent-primary hover:text-agent-primary"
@@ -64,9 +45,9 @@ export function LibraryPage({ navigate }: LibraryPageProps) {
             </span>
           ))}
         </div>
-        {rows.map((row, index) => (
+        {requirementLibraryRows.map((row, index) => (
           <button
-            className={`grid w-full ${columns} items-center px-6 py-4 text-left hover:bg-[#FAFCFE] ${index === rows.length - 1 ? "" : "border-b border-agent-divider"}`}
+            className={`grid w-full ${columns} items-center px-6 py-4 text-left hover:bg-[#FAFCFE] ${index === requirementLibraryRows.length - 1 ? "" : "border-b border-agent-divider"}`}
             key={row.title}
             type="button"
             onClick={() => row.route && navigate(row.route)}

@@ -1,13 +1,12 @@
 import { Check, Circle } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { StatusChip } from "../../components/common/StatusChip";
+import { runnerLogs, runnerSteps } from "../../lib/mockData";
 import type { Navigate } from "../../types";
 
 interface MonitorPageProps {
   navigate: Navigate;
 }
-
-const steps = ["创建隔离工作区", "读取需求文档", "代码实现", "运行测试", "提交候选方案"];
 
 export function MonitorPage({ navigate }: MonitorPageProps) {
   return (
@@ -47,18 +46,12 @@ export function MonitorPage({ navigate }: MonitorPageProps) {
         <div className="rounded-xl border border-agent-border bg-white px-6 py-5">
           <div className="mb-3.5 text-sm font-semibold text-agent-ink">最近日志</div>
           <div className="rounded-[10px] bg-agent-ink px-5 py-4 font-mono text-xs leading-8 text-[#A0AEC0]">
-            <div>
-              <span className="text-agent-cyan">[Codex]</span> <span className="text-agent-muted">12:34:21</span> 运行测试 test_refund_flow...
-            </div>
-            <div>
-              <span className="text-[#D97757]">[Claude]</span> <span className="text-agent-muted">12:34:28</span> 生成候选提交 candidate/claude-code
-            </div>
-            <div>
-              <span className="text-agent-cyan">[Codex]</span> <span className="text-agent-muted">12:35:04</span> 检查订单系统工具调用边界
-            </div>
-            <div>
-              <span className="text-agent-success">[System]</span> <span className="text-agent-muted">12:35:20</span> 等待 Codex 候选完成后进入自动评审
-            </div>
+            {runnerLogs.map(([source, time, message]) => (
+              <div key={`${source}-${time}`}>
+                <span className={source === "Codex" ? "text-agent-cyan" : source === "Claude" ? "text-[#D97757]" : "text-agent-success"}>[{source}]</span>{" "}
+                <span className="text-agent-muted">{time}</span> {message}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -115,7 +108,7 @@ function RunnerCard({
           <div className={`h-full rounded-full ${complete ? "bg-agent-success" : "bg-agent-primary"}`} style={{ width: `${progress}%` }} />
         </div>
         <div className="mb-[18px] grid gap-2.5">
-          {steps.map((step, index) => {
+          {runnerSteps.map((step, index) => {
             const done = complete || index < 3;
             const active = !complete && index === 3;
             return (

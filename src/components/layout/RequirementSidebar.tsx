@@ -1,16 +1,11 @@
 import { Plus } from "lucide-react";
+import { requirementSidebarItems } from "../../lib/mockData";
 import type { AppRoute, Navigate } from "../../types";
 
 interface RequirementSidebarProps {
   navigate?: Navigate;
   activeRoute?: AppRoute;
 }
-
-const requirements = [
-  { title: "自动客服 Agent", meta: "进行中 · 刚刚", active: true },
-  { title: "数据报表生成器", meta: "草稿 · 5 小时前" },
-  { title: "库存预警 Agent", meta: "草稿 · 3 天前" }
-];
 
 export function RequirementSidebar({ navigate }: RequirementSidebarProps) {
   return (
@@ -33,7 +28,7 @@ export function RequirementSidebar({ navigate }: RequirementSidebarProps) {
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2">
-        {requirements.map((item) => (
+        {requirementSidebarItems.map((item) => (
           <button
             className={`mb-1 w-full rounded-lg px-3 py-[11px] text-left ${item.active ? "bg-agent-pale" : "hover:bg-agent-bg"}`}
             key={item.title}

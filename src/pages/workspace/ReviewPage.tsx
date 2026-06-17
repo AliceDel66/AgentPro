@@ -1,25 +1,10 @@
 import { AppButton } from "../../components/common/Button";
+import { reviewDimensions, reviewFindings } from "../../lib/mockData";
 import type { Navigate } from "../../types";
 
 interface ReviewPageProps {
   navigate: Navigate;
 }
-
-const dimensions = [
-  ["功能完成度", 85, 92, false],
-  ["测试覆盖", 78, 88, false],
-  ["性能表现", 90, 85, false],
-  ["稳定性", 82, 91, false],
-  ["幻觉风险", 30, 15, true],
-  ["安全风险", 20, 10, true],
-  ["需求一致性", 88, 94, false]
-] as const;
-
-const findings = [
-  ["阻塞", "Codex 方案的退款操作缺少金额校验，存在幻觉导致的超额退款风险", "bg-agent-danger", "bg-[#FEF2F2]"],
-  ["建议", "Claude 方案的错误提示信息可以更加用户友好，避免使用技术术语", "bg-agent-warning", "bg-[#FFF7ED]"],
-  ["优点", "Claude 方案实现了完整的对话记忆机制，能准确关联历史订单信息", "bg-agent-success", "bg-[#ECFDF5]"]
-] as const;
 
 export function ReviewPage({ navigate }: ReviewPageProps) {
   return (
@@ -61,7 +46,7 @@ export function ReviewPage({ navigate }: ReviewPageProps) {
             </span>
           </div>
           <div className="grid gap-5">
-            {dimensions.map(([name, codex, claude, lowerBetter]) => (
+            {reviewDimensions.map(([name, codex, claude, lowerBetter]) => (
               <div key={name}>
                 <div className="mb-2 flex justify-between">
                   <span className="text-[13px] font-medium text-agent-secondary">
@@ -84,7 +69,7 @@ export function ReviewPage({ navigate }: ReviewPageProps) {
         <div className="rounded-xl border border-agent-border bg-white p-6">
           <div className="mb-4 text-base font-semibold text-agent-ink">评审发现</div>
           <div className="grid gap-3">
-            {findings.map(([label, text, labelBg, boxBg]) => (
+            {reviewFindings.map(([label, text, labelBg, boxBg]) => (
               <div className={`flex items-start gap-3 rounded-[10px] p-3.5 ${boxBg}`} key={label}>
                 <span className={`shrink-0 rounded-lg px-2.5 py-[3px] text-[11px] font-semibold text-white ${labelBg}`}>{label}</span>
                 <div className="text-[13px] leading-6 text-agent-secondary">{text}</div>

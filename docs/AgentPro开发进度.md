@@ -302,17 +302,34 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
-  - 哈希：
+  - 哈希：70b62a4
   - 信息：完成设置页与安全配置展示
 
 ### 14. Mock 数据与页面交互串联
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 集中维护需求列表 mock 数据
+  - 集中维护反问问题 mock 数据
+  - 集中维护需求库 mock 数据
+  - 集中维护并行监控日志与步骤 mock 数据
+  - 集中维护自动评审维度与发现 mock 数据
+  - 页面间主要按钮跳转已串联
 - 相关文件：
+  - src/lib/mockData.ts
+  - src/components/layout/RequirementSidebar.tsx
+  - src/pages/workspace/ChatPage.tsx
+  - src/pages/workspace/LibraryPage.tsx
+  - src/pages/workspace/MonitorPage.tsx
+  - src/pages/workspace/ReviewPage.tsx
 - 验证结果：
+  - 需求访谈、需求库、监控、评审页面已改为读取统一 mock 数据
+  - 登录、模型配置、需求访谈、反问、草案、调度、监控、评审、设置主流程可通过按钮跳转
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成 Mock 数据集中维护与页面交互串联
 
 ### 15. 后端 API 类型与服务层占位
 - 状态：未开始

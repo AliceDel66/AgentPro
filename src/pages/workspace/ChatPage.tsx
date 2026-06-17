@@ -1,16 +1,11 @@
 import { Bot, Send, Sparkles } from "lucide-react";
 import { RequirementSidebar } from "../../components/layout/RequirementSidebar";
+import { followupQuestions } from "../../lib/mockData";
 import type { Navigate } from "../../types";
 
 interface ChatPageProps {
   navigate: Navigate;
 }
-
-const questions = [
-  "这个 Agent 需要能直接操作订单系统（如自动发起退款），还是只做信息查询和引导？",
-  "遇到无法处理的复杂问题时，希望怎样转接给人工客服？",
-  "需要记住用户之前的对话历史吗？比如用户上次咨询过退货进度。"
-];
 
 export function ChatPage({ navigate }: ChatPageProps) {
   return (
@@ -43,7 +38,7 @@ export function ChatPage({ navigate }: ChatPageProps) {
               </div>
               <div className="mb-2.5 text-sm font-semibold text-agent-ink">还需要确认几个关键点：</div>
               <div className="grid gap-2.5">
-                {questions.map((question, index) => (
+                {followupQuestions.map((question, index) => (
                   <div className="flex items-start gap-2.5" key={question}>
                     <span className="mt-0.5 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-agent-pale text-[11px] font-bold text-agent-primary">
                       {index + 1}
