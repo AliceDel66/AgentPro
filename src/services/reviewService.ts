@@ -14,6 +14,14 @@ export function getReviewReport(jobId: string) {
   return apiGet(`/reviews/${jobId}`, mockReview);
 }
 
+export function createReviewReport(payload: { jobId?: string; specId?: string }) {
+  return apiPost("/reviews", payload, mockReview);
+}
+
 export function acceptReviewRecommendation(reviewId: string) {
-  return apiPost("/reviews/accept", { reviewId }, { accepted: true });
+  return apiPost(`/reviews/${reviewId}/accept`, {}, { accepted: true });
+}
+
+export function requestReviewRework(reviewId: string) {
+  return apiPost(`/reviews/${reviewId}/rework`, {}, { reworkRequested: true });
 }

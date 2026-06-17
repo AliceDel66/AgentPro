@@ -84,4 +84,7 @@ export interface ReviewReport {
   hallucinationRisk: number;
   stabilityScore: number;
   performanceScore: number;
+  status?: string;
+  summary?: string;
+  findings?: Array<Record<string, unknown>>;
 }

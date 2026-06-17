@@ -218,17 +218,31 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：
+  - 哈希：b98497a
   - 信息：完成并行开发监控与实时日志接口
 
 ### 9. 自动评审
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 实现自动评审创建、读取、接受和返工接口
+  - 评审基于 dev job 事件、runner artifact 和 AgentSpec 生成确定性初评分
+  - 覆盖功能完成度、稳定性、性能、幻觉风险和安全风险 finding
+  - 前端 reviewService 接入 createReviewReport、accept、rework
 - 相关文件：
+  - backend/app/modules/review/router.py
+  - backend/app/modules/review/schemas.py
+  - backend/tests/test_review.py
+  - src/services/reviewService.ts
+  - src/services/types.ts
 - 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成自动评审报告生成与前端对接
 
 ### 10. Docker 部署
 - 状态：未开始
