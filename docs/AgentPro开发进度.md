@@ -150,17 +150,31 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
-  - 哈希：
+  - 哈希：1fa7b9f
   - 信息：完成需求访谈工作台页面
 
 ### 7. 反问确认页
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 对话摘要卡片
+  - Agent 反问确认引导
+  - 订单系统操作权限决策卡
+  - 人工转接方式决策卡
+  - 已确认决策与系统评估侧栏
+  - 确认选择后进入 AgentSpec 草案页
 - 相关文件：
+  - src/pages/workspace/FollowupPage.tsx
+  - src/App.tsx
+  - src/components/layout/RequirementSidebar.tsx
 - 验证结果：
+  - 页面结构按设计稿左侧需求列表、中间决策卡、右侧决策面板实现
+  - 当前选项状态与系统评估为 mock 数据
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、API Key 或真实隐私数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成反问确认页面
 
 ### 8. AgentSpec 草案与审批模块
 - 状态：未开始

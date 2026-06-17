@@ -5,6 +5,7 @@ import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { SetupPage } from "./pages/setup/SetupPage";
 import { ChatPage } from "./pages/workspace/ChatPage";
+import { FollowupPage } from "./pages/workspace/FollowupPage";
 import { ShellPlaceholder } from "./pages/workspace/ShellPlaceholder";
 import type { AppRoute } from "./types";
 
@@ -17,7 +18,7 @@ export default function App() {
   if (route !== "login") {
     return (
       <AppShell navigate={setRoute} route={route}>
-        {route === "chat" ? <ChatPage navigate={setRoute} /> : <ShellPlaceholder route={route} />}
+        {route === "chat" ? <ChatPage navigate={setRoute} /> : route === "followup" ? <FollowupPage navigate={setRoute} /> : <ShellPlaceholder route={route} />}
       </AppShell>
     );
   }
