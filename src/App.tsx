@@ -6,6 +6,7 @@ import { RegisterPage } from "./pages/auth/RegisterPage";
 import { SetupPage } from "./pages/setup/SetupPage";
 import { ChatPage } from "./pages/workspace/ChatPage";
 import { FollowupPage } from "./pages/workspace/FollowupPage";
+import { LibraryPage } from "./pages/workspace/LibraryPage";
 import { SpecPage } from "./pages/workspace/SpecPage";
 import { ShellPlaceholder } from "./pages/workspace/ShellPlaceholder";
 import type { AppRoute } from "./types";
@@ -25,6 +26,8 @@ export default function App() {
           <FollowupPage navigate={setRoute} />
         ) : route === "spec" ? (
           <SpecPage navigate={setRoute} />
+        ) : route === "library" ? (
+          <LibraryPage navigate={setRoute} />
         ) : (
           <ShellPlaceholder route={route} />
         )}
