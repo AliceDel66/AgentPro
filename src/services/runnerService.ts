@@ -9,9 +9,27 @@ const mockJob: RunnerJob = {
 };
 
 export function startRunnerJob(request: RunnerRequest) {
-  return apiPost("/runner/jobs", request, mockJob);
+  return apiPost("/dev-jobs", request, mockJob);
 }
 
 export function getRunnerJob(jobId: string) {
-  return apiGet(`/runner/jobs/${jobId}`, mockJob);
+  return apiGet(`/dev-jobs/${jobId}`, mockJob);
+}
+
+export function leaseRunnerJob(jobId: string, runnerId: string) {
+  return apiPost(`/dev-jobs/${jobId}/lease`, { runnerId }, { leased: true });
+}
+
+export function appendRunnerEvent(
+  jobId: string,
+  event: { phase: string; message: string; level?: string; progress?: number; status?: string }
+) {
+  return apiPost(`/dev-jobs/${jobId}/events`, event, mockJob);
+}
+
+export function appendRunnerArtifact(
+  jobId: string,
+  artifact: { engine: "codex" | "claude-code"; kind: string; summary?: string; uri?: string; payload?: Record<string, unknown> }
+) {
+  return apiPost(`/dev-jobs/${jobId}/artifacts`, artifact, { id: "artifact_mock_001" });
 }

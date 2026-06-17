@@ -171,17 +171,34 @@
   - 已通过 npm run build
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：
+  - 哈希：22cf624
   - 信息：完成 AgentSpec 草案审批与需求库接口
 
 ### 7. 本地 Runner 协议与 Tauri 命令桥
-- 状态：未开始
+- 状态：已完成
 - 完成功能：
+  - 实现 dev job 创建、读取、租约领取、事件回传、产物回传和事件列表接口
+  - strategy 支持 codex、claude-code、parallel，并返回对应 engines
+  - 前端 runnerService 接入 `/dev-jobs` 协议
+  - Tauri 新增白名单 CLI 检测、命令构建和启动命令，不接受任意 shell 字符串
+  - Tauri 命令仅允许 codex 和 claude-code 两类引擎
 - 相关文件：
+  - backend/app/modules/runner/router.py
+  - backend/app/modules/runner/schemas.py
+  - backend/tests/test_runner.py
+  - src/services/runnerService.ts
+  - src-tauri/src/lib.rs
+  - src-tauri/Cargo.toml
 - 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 cd src-tauri && cargo check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
   - 哈希：
-  - 信息：
+  - 信息：完成本地 Runner 协议与 Tauri 命令桥对接
 
 ### 8. 并行开发监控
 - 状态：未开始

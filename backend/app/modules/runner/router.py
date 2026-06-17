@@ -1,0 +1,187 @@
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.responses import ok
+from app.db.models import DevJob, DevJobArtifact, DevJobEvent, User
+from app.db.session import get_db_session
+from app.modules.auth.router import get_current_user
+from app.modules.runner.schemas import (
+    DevJobArtifactCreate,
+    DevJobArtifactPayload,
+    DevJobCreate,
+    DevJobEventCreate,
+    DevJobLeaseRequest,
+    DevJobLeaseResponse,
+    DevJobPayload,
+)
+
+router = APIRouter(prefix="/dev-jobs")
+db_session_dependency = Depends(get_db_session)
+current_user_dependency = Depends(get_current_user)
+
+
+def engines_for_strategy(strategy: str) -> list[str]:
+    if strategy == "parallel":
+        return ["codex", "claude-code"]
+    return [strategy]
+
+
+def serialize_job(job: DevJob) -> DevJobPayload:
+    return DevJobPayload(
+        id=job.id,
+        status=job.status,
+        progress=job.progress,
+        engines=engines_for_strategy(job.strategy),
+        strategy=job.strategy,
+        requirementId=job.requirement_id,
+        specId=job.spec_id,
+    )
+
+
+async def get_owned_job(job_id: str, session: AsyncSession, user: User) -> DevJob:
+    job = await session.get(DevJob, job_id)
+    if not job or job.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dev job not found")
+    return job
+
+
+@router.post("")
+async def create_dev_job(
+    body: DevJobCreate,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    job = DevJob(
+        user_id=current_user.id,
+        requirement_id=body.requirementId,
+        spec_id=body.specId,
+        strategy=body.strategy,
+        status="queued",
+        progress=0,
+    )
+    session.add(job)
+    await session.commit()
+    return ok(serialize_job(job))
+
+
+@router.get("/{job_id}")
+async def get_dev_job(
+    job_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    return ok(serialize_job(await get_owned_job(job_id, session, current_user)))
+
+
+@router.post("/{job_id}/lease")
+async def lease_dev_job(
+    job_id: str,
+    body: DevJobLeaseRequest,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    job = await get_owned_job(job_id, session, current_user)
+    now = datetime.now(UTC)
+    if job.lease_owner and job.lease_expires_at and job.lease_expires_at > now:
+        return ok(
+            DevJobLeaseResponse(
+                leased=False,
+                leaseOwner=job.lease_owner,
+                leaseExpiresAt=job.lease_expires_at.isoformat(),
+            )
+        )
+
+    job.lease_owner = body.runnerId
+    job.lease_expires_at = now + timedelta(seconds=body.leaseSeconds)
+    job.status = "running"
+    await session.commit()
+    return ok(
+        DevJobLeaseResponse(
+            leased=True,
+            leaseOwner=job.lease_owner,
+            leaseExpiresAt=job.lease_expires_at.isoformat(),
+        )
+    )
+
+
+@router.post("/{job_id}/events")
+async def append_dev_job_event(
+    job_id: str,
+    body: DevJobEventCreate,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    job = await get_owned_job(job_id, session, current_user)
+    event = DevJobEvent(
+        job_id=job.id,
+        level=body.level,
+        phase=body.phase,
+        message=body.message,
+        payload=body.payload,
+    )
+    session.add(event)
+    if body.progress is not None:
+        job.progress = body.progress
+    if body.status:
+        job.status = body.status
+    await session.commit()
+    return ok(serialize_job(job))
+
+
+@router.post("/{job_id}/artifacts")
+async def append_dev_job_artifact(
+    job_id: str,
+    body: DevJobArtifactCreate,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    job = await get_owned_job(job_id, session, current_user)
+    artifact = DevJobArtifact(
+        job_id=job.id,
+        engine=body.engine,
+        kind=body.kind,
+        summary=body.summary,
+        uri=body.uri,
+        payload=body.payload,
+    )
+    session.add(artifact)
+    await session.commit()
+    return ok(
+        DevJobArtifactPayload(
+            id=artifact.id,
+            engine=artifact.engine,
+            kind=artifact.kind,
+            summary=artifact.summary,
+            uri=artifact.uri,
+        )
+    )
+
+
+@router.get("/{job_id}/events")
+async def list_dev_job_events(
+    job_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    job = await get_owned_job(job_id, session, current_user)
+    result = await session.execute(
+        select(DevJobEvent)
+        .where(DevJobEvent.job_id == job.id)
+        .order_by(DevJobEvent.created_at.asc())
+    )
+    return ok(
+        [
+            {
+                "id": event.id,
+                "level": event.level,
+                "phase": event.phase,
+                "message": event.message,
+                "payload": event.payload,
+                "createdAt": event.created_at.isoformat(),
+            }
+            for event in result.scalars().all()
+        ]
+    )
