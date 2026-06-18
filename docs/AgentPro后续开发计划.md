@@ -77,8 +77,8 @@
 - [x] 产物管理：代码 diff / 测试结果 / 日志的存储与回链（`dev_job_artifacts.uri`）。✅ 已记录 `run-log` 与 `diff-summary` artifacts，包含退出码、stdout/stderr、耗时、diff stat 和本地工作区 URI。
 
 ### 5.2 真实评审
-- [ ] 用真实静态分析、测试通过率、安全扫描结果替换 `review/router.py` 的启发式打分公式。
-- [ ] 「合并优点」按钮落地（当前为占位）。
+- [x] 用真实静态分析、测试通过率、安全扫描结果替换 `review/router.py` 的启发式打分公式。✅ 已新增 review analyzer，从 Runner events、`run-log`、`diff-summary`、`test-report`、`security-scan`/`secret-scan` artifact 提取退出码、测试信号、diff、安全命中和耗时，生成评分与 findings。
+- [x] 「合并优点」按钮落地（当前为占位）。✅ 已新增 `/reviews/{id}/merge` 和前端按钮调用，状态进入 `merge_planned` 并写入审计日志。
 
 ### 5.3 流式体验
 - [ ] 对话改为 token 级流式（后端 SSE/分块透传上游模型流，前端 `TypewriterText` 直接消费真实流而非整段回填）。

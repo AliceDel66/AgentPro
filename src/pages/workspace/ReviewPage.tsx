@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AppButton } from "../../components/common/Button";
 import { LoadingState } from "../../components/common/LoadingState";
-import { acceptReviewRecommendation, createReviewReport, getReviewReport, requestReviewRework } from "../../services/reviewService";
+import { acceptReviewRecommendation, createReviewReport, getReviewReport, mergeReviewStrengths, requestReviewRework } from "../../services/reviewService";
 import type { ReviewReport } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -17,6 +17,7 @@ export function ReviewPage({ activeJobId, activeReviewId, activeSpecId, navigate
   const [report, setReport] = useState<ReviewReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [action, setAction] = useState<"accept" | "rework" | null>(null);
+  const [merging, setMerging] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const acting = action !== null;
 
@@ -85,6 +86,25 @@ export function ReviewPage({ activeJobId, activeReviewId, activeSpecId, navigate
     }
   };
 
+  const handleMerge = async () => {
+    if (!report || acting || merging) return;
+    setMerging(true);
+    setErrorMessage(null);
+    try {
+      await mergeReviewStrengths(report.id);
+      setReport({
+        ...report,
+        status: "merge_planned",
+        summary: "已记录合并优点计划，请在开发调度中创建返工任务执行。"
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "合并优点失败";
+      setErrorMessage(message);
+    } finally {
+      setMerging(false);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-agent-bg px-9 py-8 pb-24">
       <div className="mx-auto max-w-[1020px]">
@@ -99,8 +119,8 @@ export function ReviewPage({ activeJobId, activeReviewId, activeSpecId, navigate
             <AppButton disabled={!report || acting} loading={action === "rework"} type="button" variant="secondary" onClick={() => void handleRework()}>
               {action === "rework" ? "提交中..." : "要求返工"}
             </AppButton>
-            <AppButton disabled={!report || acting} type="button" variant="secondary">
-              合并优点
+            <AppButton disabled={!report || acting || merging} loading={merging} type="button" variant="secondary" onClick={() => void handleMerge()}>
+              {merging ? "记录中..." : "合并优点"}
             </AppButton>
             <AppButton disabled={!report || acting} loading={action === "accept"} type="button" onClick={() => void handleAccept()}>
               {action === "accept" ? "采纳中..." : "采纳推荐方案"}

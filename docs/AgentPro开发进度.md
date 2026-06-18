@@ -557,3 +557,24 @@
 - Commit：
   - 哈希：待提交
   - 信息：落地真实 Runner 执行层
+
+### 22. P2 真实评审与合并优点
+- 状态：已完成
+- 完成功能：
+  - 评审报告页“合并优点”按钮接入真实 `/reviews/{id}/merge` 接口
+  - 合并优点成功后将报告状态更新为 `merge_planned`
+  - 合并优点成功后展示“已记录合并优点计划”的摘要
+  - reviewService 新增 mergeReviewStrengths
+  - 后端评审报告改为基于真实 Runner events/artifacts 生成评分与 findings
+- 相关文件：
+  - src/pages/workspace/ReviewPage.tsx
+  - src/services/reviewService.ts
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_review.py
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/review backend/tests/test_review.py
+- Commit：
+  - 哈希：待提交
+  - 信息：落地真实自动评审

@@ -25,3 +25,7 @@ export function acceptReviewRecommendation(reviewId: string) {
 export function requestReviewRework(reviewId: string) {
   return apiPost(`/reviews/${reviewId}/rework`, {}, { reworkRequested: true });
 }
+
+export function mergeReviewStrengths(reviewId: string) {
+  return apiPost(`/reviews/${reviewId}/merge`, {}, { status: "merge_planned" });
+}

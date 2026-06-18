@@ -388,3 +388,34 @@
 - Commit：
   - 哈希：待提交
   - 信息：落地真实 Runner 执行层
+
+### 15. P2 真实自动评审
+- 状态：已完成
+- 完成功能：
+  - 新增 review analyzer，将评审输入从启发式计数升级为真实 Runner 证据分析
+  - 从 `run-log` artifact 读取退出码、stdout/stderr、耗时和 diff stat
+  - 从 `diff-summary` artifact 读取代码 diff 和 diff stat
+  - 从 `test-report` artifact 与 Runner 输出中识别测试通过信号
+  - 从 `security-scan`、`secret-scan` 和 diff/output 中识别疑似敏感字段
+  - 基于每个引擎的成功运行、失败运行、diff、测试信号、安全命中和耗时计算推荐引擎
+  - 基于事件错误、失败运行、总耗时和 AgentSpec 风险生成整体评分、稳定性、性能与幻觉风险
+  - 自动生成稳定性、测试覆盖、安全扫描和需求一致性 findings
+  - 新增 `/api/v1/reviews/{id}/merge`，将评审状态更新为 `merge_planned` 并写入审计日志
+  - 前端“合并优点”按钮接入真实后端动作，成功后更新报告状态和摘要
+- 相关文件：
+  - backend/app/modules/review/analyzer.py
+  - backend/app/modules/review/router.py
+  - backend/tests/test_review.py
+  - src/services/reviewService.ts
+  - src/pages/workspace/ReviewPage.tsx
+  - docs/AgentPro后续开发计划.md
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_review.py
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/review backend/tests/test_review.py
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：落地真实自动评审

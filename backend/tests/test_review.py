@@ -39,6 +39,32 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
         headers=headers,
         json={
             "engine": "codex",
+            "kind": "run-log",
+            "summary": "codex run completed",
+            "payload": {
+                "exitCode": 0,
+                "durationSeconds": 18,
+                "stdout": "pytest passed",
+                "stderr": "",
+                "diffStat": "src/app.py | 4 ++--",
+            },
+        },
+    )
+    await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/artifacts",
+        headers=headers,
+        json={
+            "engine": "codex",
+            "kind": "diff-summary",
+            "summary": "src/app.py | 4 ++--",
+            "payload": {"stat": "src/app.py | 4 ++--", "diff": "diff --git a/src/app.py"},
+        },
+    )
+    await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/artifacts",
+        headers=headers,
+        json={
+            "engine": "codex",
             "kind": "test-report",
             "summary": "pytest passed",
             "payload": {"tests": "passed"},
@@ -54,7 +80,8 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
     review = review_response.json()["data"]
     assert review["recommendedEngine"] == "codex"
     assert review["score"] >= 80
-    assert len(review["findings"]) == 3
+    assert len(review["findings"]) == 4
+    assert any(item["category"] == "test" for item in review["findings"])
 
     get_response = await api_client.get(f"/api/v1/reviews/{review['id']}", headers=headers)
     assert get_response.status_code == 200
@@ -75,6 +102,14 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
     )
     assert rework_response.status_code == 200
     assert rework_response.json()["data"]["status"] == "rework_requested"
+
+    merge_response = await api_client.post(
+        f"/api/v1/reviews/{review['id']}/merge",
+        headers=headers,
+        json={},
+    )
+    assert merge_response.status_code == 200
+    assert merge_response.json()["data"]["status"] == "merge_planned"
 
 
 async def test_review_rejects_other_users_spec(api_client: AsyncClient) -> None:
