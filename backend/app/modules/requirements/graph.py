@@ -165,6 +165,25 @@ def build_gap_question(key: str, scenario: str, subject: str) -> dict[str, str]:
     return {"key": key, "question": question, "reason": "补齐真实业务场景、权限边界和验收标准"}
 
 
+def confirmed_decision_keys(decisions: list[dict[str, Any]] | None) -> set[str]:
+    keys: set[str] = set()
+    for item in decisions or []:
+        key = str(item.get("key") or "").strip()
+        if key and item.get("confirmed"):
+            keys.add(key)
+    return keys
+
+
+def filter_confirmed_followups(
+    followups: list[dict[str, Any]],
+    decisions: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    confirmed_keys = confirmed_decision_keys(decisions)
+    if not confirmed_keys:
+        return followups
+    return [item for item in followups if str(item.get("key") or "").strip() not in confirmed_keys]
+
+
 def intake_summary(state: RequirementGraphState) -> RequirementGraphState:
     user_text = latest_user_text(state.get("messages", []))
     summary = user_text.strip()[:240] or "用户尚未提供明确需求。"
@@ -184,6 +203,8 @@ def gap_analysis(state: RequirementGraphState) -> RequirementGraphState:
     gaps = [
         key for key, keywords in gap_rules.items() if not any(word in corpus for word in keywords)
     ]
+    confirmed_keys = confirmed_decision_keys(state.get("confirmed_decisions", []))
+    gaps = [key for key in gaps if key not in confirmed_keys]
     return {**state, "gaps": gaps}
 
 
@@ -195,6 +216,7 @@ def followup_questions(state: RequirementGraphState) -> RequirementGraphState:
         build_gap_question(key, scenario, subject)
         for key in state.get("gaps", [])
     ]
+    questions = filter_confirmed_followups(questions, state.get("confirmed_decisions", []))
     label = SCENARIO_LABELS.get(scenario, SCENARIO_LABELS["generic"])
     if questions:
         assistant_message = "\n".join(

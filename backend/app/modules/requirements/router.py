@@ -25,7 +25,11 @@ from app.modules.requirements.ai_service import (
     run_ai_requirement_graph,
     stream_ai_requirement_message,
 )
-from app.modules.requirements.graph import RequirementGraphState, run_requirement_graph
+from app.modules.requirements.graph import (
+    RequirementGraphState,
+    filter_confirmed_followups,
+    run_requirement_graph,
+)
 from app.modules.requirements.schemas import (
     AgentSpecPayload,
     ConversationMessagePayload,
@@ -84,6 +88,19 @@ async def load_decisions(session: AsyncSession, requirement_id: str) -> list[dic
         }
         for decision in result.scalars().all()
     ]
+
+
+def format_decision_value(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
+def followup_confirmation_message(decisions: list[dict[str, Any]]) -> str:
+    lines = ["已确认反问："]
+    for item in decisions:
+        lines.append(f"- {item['key']}：{format_decision_value(item.get('value'))}")
+    return "\n".join(lines)
 
 
 async def persist_graph_run(
@@ -246,6 +263,8 @@ async def build_detail(
         if graph_state
         else await load_decisions(session, requirement.id)
     )
+    followups = graph_state.get("followupQuestions", []) if graph_state else []
+    followups = filter_confirmed_followups(followups, decisions)
     return RequirementDetail(
         id=requirement.id,
         title=requirement.title,
@@ -253,7 +272,7 @@ async def build_detail(
         maturity=requirement.maturity,
         summary=requirement.summary,
         messages=[serialize_message(message) for message in messages],
-        followupQuestions=graph_state.get("followupQuestions", []) if graph_state else [],
+        followupQuestions=followups,
         decisions=decisions,
         safetyReview=graph_state.get("safetyReview", {}) if graph_state else {},
         graphRunId=graph_run_id,
@@ -476,7 +495,11 @@ async def confirm_followups(
     current_user: User = current_user_dependency,
 ):
     requirement = await get_owned_requirement(requirement_id, session, current_user)
+    submitted_decisions: list[dict[str, Any]] = []
     for item in body.decisions:
+        submitted_decisions.append(
+            {"key": item.key, "value": item.value, "confirmed": item.confirmed}
+        )
         result = await session.execute(
             select(RequirementDecision).where(
                 RequirementDecision.requirement_id == requirement.id,
@@ -496,6 +519,16 @@ async def confirm_followups(
                     confirmed_by_user=item.confirmed,
                 )
             )
+
+    if submitted_decisions:
+        session.add(
+            ConversationMessage(
+                requirement_id=requirement.id,
+                role="user",
+                content=followup_confirmation_message(submitted_decisions),
+                message_metadata={"kind": "followup_confirmation"},
+            )
+        )
 
     await session.flush()
     confirmed_decisions = await load_decisions(session, requirement.id)

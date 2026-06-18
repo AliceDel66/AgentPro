@@ -4,6 +4,8 @@ from importlib import import_module
 import pytest
 from httpx import AsyncClient
 
+from app.modules.requirements.graph import run_requirement_graph
+
 
 async def auth_headers(client: AsyncClient) -> dict[str, str]:
     code_response = await client.post(
@@ -124,6 +126,66 @@ async def test_requirement_interview_flow(api_client: AsyncClient) -> None:
     )
     assert archive_response.status_code == 200
     assert archive_response.json()["data"]["status"] == "archived"
+
+
+def test_requirement_graph_filters_confirmed_followup_keys() -> None:
+    state = run_requirement_graph(
+        [
+            {
+                "role": "user",
+                "content": "我想制作一个开发 Agent，帮我把产品需求拆成任务。",
+            }
+        ],
+        confirmed_decisions=[
+            {
+                "key": "target_users",
+                "value": "主要给产品、研发、测试和项目负责人使用。",
+                "confirmed": True,
+            }
+        ],
+    )
+
+    followup_keys = {item["key"] for item in state["followupQuestions"]}
+    assert "target_users" not in followup_keys
+    assert "target_users" not in state["gaps"]
+
+
+async def test_confirmed_followup_answers_are_not_repeated(api_client: AsyncClient) -> None:
+    headers = await auth_headers(api_client)
+    create_response = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={
+            "title": "开发 Agent",
+            "initialMessage": "我想制作一个开发 Agent，帮我把产品需求拆成任务。",
+        },
+    )
+    assert create_response.status_code == 200
+    created = create_response.json()["data"]
+    requirement_id = created["id"]
+    first_question = created["followupQuestions"][0]
+
+    confirm_response = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/followups/confirm",
+        headers=headers,
+        json={
+            "decisions": [
+                {
+                    "key": first_question["key"],
+                    "value": "主要给产品、研发、测试和项目负责人使用。",
+                    "confirmed": True,
+                }
+            ]
+        },
+    )
+
+    assert confirm_response.status_code == 200
+    confirmed = confirm_response.json()["data"]
+    remaining_keys = {item["key"] for item in confirmed["followupQuestions"]}
+    assert first_question["key"] not in remaining_keys
+    assert confirmed["messages"][-2]["role"] == "user"
+    assert "已确认反问" in confirmed["messages"][-2]["content"]
+    assert first_question["question"] not in confirmed["messages"][-1]["content"]
 
 
 async def test_requirement_chat_streams_tokens_and_detail(api_client: AsyncClient) -> None:

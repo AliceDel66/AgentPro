@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.crypto import decrypt_secret
 from app.core.net import assert_safe_outbound_url
 from app.db.models import ModelProviderConfig
-from app.modules.requirements.graph import RequirementGraphState, run_requirement_graph
+from app.modules.requirements.graph import (
+    RequirementGraphState,
+    confirmed_decision_keys,
+    filter_confirmed_followups,
+    run_requirement_graph,
+)
 
 SYSTEM_PROMPT = """你是 AgentPro 的需求访谈与 Agent 架构助手。
 你的任务是基于用户的真实对话，继续进行智能澄清、归纳需求、识别风险，并产出 AgentSpec 草案。
@@ -39,6 +44,8 @@ SYSTEM_PROMPT = """你是 AgentPro 的需求访谈与 Agent 架构助手。
 - assistantMessage 和 followupQuestions 必须结合用户给出的真实场景、对象、任务和行业名词。
 - 不允许机械套用“目标用户/工具/权限/指标/兜底”模板；每个问题都要写出它与当前场景的关系。
 - 不要编造用户没有给出的业务事实；不确定时放入 followupQuestions。
+- confirmedDecisions 中 confirmed=true 的 key 视为用户已经回答；
+  禁止再次生成同 key 的 followupQuestions，也不要在 assistantMessage 中重复追问同一问题。
 - 当需求足够清晰时，followupQuestions 返回空数组，assistantMessage 提示可以生成 AgentSpec 草案。
 - 高风险动作包括支付、退款、删除、写入生产数据、发送外部消息、审批绕过等。
 - 发现高风险动作时，必须在 safetyReview 中说明。
@@ -52,6 +59,8 @@ STREAM_SYSTEM_PROMPT = """你是 AgentPro 的需求访谈与 Agent 架构助手�
 - 先简短总结你理解到的需求，再提出最关键的 2-5 个反问或确认项。
 - 反问必须结合用户真实业务，不要机械套用模板。
 - 不要编造用户没有给出的业务事实；不确定时明确请用户确认。
+- confirmedDecisions 中 confirmed=true 的问题视为用户已经回答；
+  不要重复追问同一个问题，只能在确实需要时追问更具体的新缺口。
 - 如涉及支付、退款、删除、生产数据写入、外部消息发送、
   审批绕过等高风险动作，必须提醒权限和人工审批边界。
 - 如果需求已经足够清晰，提示可以生成 AgentSpec 草案。
@@ -291,6 +300,22 @@ def normalize_spec_draft(
     }
 
 
+def followup_message_from_remaining(
+    raw_followups: list[dict[str, str]],
+    followups: list[dict[str, Any]],
+    assistant_message: str,
+) -> str:
+    if len(raw_followups) == len(followups):
+        return assistant_message
+    if followups:
+        lines = ["已记录你的确认。为了让 AgentSpec 更可执行，还需要补充："]
+        lines.extend(
+            f"{index}. {item['question']}" for index, item in enumerate(followups, start=1)
+        )
+        return "\n".join(lines)
+    return "已记录你的确认，当前需求的关键问题已更新。你可以继续补充细节，或生成 AgentSpec 草案。"
+
+
 def normalize_ai_payload(
     payload: dict[str, Any],
     title: str,
@@ -307,8 +332,14 @@ def normalize_ai_payload(
         "",
     )
     summary = str(payload.get("summary") or latest_user_message or title).strip()
-    followups = normalize_followups(payload.get("followupQuestions"))
     decisions = normalize_decisions(payload.get("decisions"), confirmed_decisions)
+    raw_followups = normalize_followups(payload.get("followupQuestions"))
+    followups = filter_confirmed_followups(raw_followups, decisions)
+    gaps = [
+        gap
+        for gap in string_list(payload.get("gaps"), limit=8)
+        if gap not in confirmed_decision_keys(decisions)
+    ]
     spec_draft = normalize_spec_draft(
         payload.get("specDraft"),
         title,
@@ -316,12 +347,17 @@ def normalize_ai_payload(
         followups,
         decisions,
     )
+    assistant_message = followup_message_from_remaining(
+        raw_followups,
+        followups,
+        str(payload.get("assistantMessage") or "").strip(),
+    )
     return {
         "messages": messages,
         "confirmed_decisions": confirmed_decisions,
-        "assistantMessage": str(payload.get("assistantMessage") or "").strip(),
+        "assistantMessage": assistant_message,
         "summary": summary,
-        "gaps": string_list(payload.get("gaps"), limit=8),
+        "gaps": gaps,
         "followupQuestions": followups,
         "decisions": decisions,
         "specDraft": spec_draft,

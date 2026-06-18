@@ -497,3 +497,36 @@
 - Commit：
   - 哈希：待提交
   - 信息：修复 AgentSpec 与评审报告重复生成问题
+
+### 19. 反问确认去重与对话闭环修复
+- 状态：已完成
+- 完成功能：
+  - 修复用户已回答反问后，系统仍重复追问同一个问题的死循环
+  - RequirementGraph 根据 `confirmed_decisions` 过滤已确认的 gap 与 followup question
+  - AI 结构化输出归一化时过滤已确认 key，模型返回旧问题时改写为“已记录确认/剩余问题”
+  - 流式需求访谈 prompt 增加 confirmedDecisions 规则，降低重复追问概率
+  - `/followups/confirm` 提交回答后追加一条用户确认消息，让对话流可见“用户已经回答过”
+  - 详情接口返回旧 graph snapshot 时也会过滤已确认问题，避免历史快照继续显示旧问题
+  - 新增回归测试：确认过的 followup key 不再出现在后续 `followupQuestions`，且不会在助手回复中重复
+- 根因说明：
+  - 前端提交卡片回答后，回答只进入 `requirement_decisions`
+  - 原 graph 的 gap/followup 生成只看 conversation text，没有按 `decision.key` 排除已确认问题
+  - 因此同一个 key 会在下一轮 graph run 中继续被识别为缺口
+- 相关文件：
+  - backend/app/modules/requirements/graph.py
+  - backend/app/modules/requirements/ai_service.py
+  - backend/app/modules/requirements/router.py
+  - backend/tests/test_requirements.py
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_requirements.py
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/requirements backend/tests/test_requirements.py
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（50 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：修复需求反问重复追问问题
