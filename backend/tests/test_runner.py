@@ -3,31 +3,47 @@ from httpx import AsyncClient
 from app.core.config import get_settings
 
 
-async def runner_auth_headers(client: AsyncClient) -> dict[str, str]:
-    code_response = await client.post(
-        "/api/v1/auth/email-code", json={"email": "runner@example.com"}
-    )
+async def register_headers(client: AsyncClient, email: str) -> dict[str, str]:
+    code_response = await client.post("/api/v1/auth/email-code", json={"email": email})
     code = code_response.json()["data"]["debugCode"]
     register_response = await client.post(
         "/api/v1/auth/register",
         json={
-            "email": "runner@example.com",
+            "email": email,
             "code": code,
             "password": "Password123",
-            "name": "Runner User",
+            "name": email.split("@")[0],
         },
     )
     token = register_response.json()["data"]["accessToken"]
     return {"Authorization": f"Bearer {token}"}
 
 
+async def runner_auth_headers(client: AsyncClient) -> dict[str, str]:
+    return await register_headers(client, "runner@example.com")
+
+
+async def create_owned_spec(client: AsyncClient, headers: dict[str, str]) -> str:
+    requirement_response = await client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={"title": "Runner 需求", "initialMessage": "做一个自动化运营 agent"},
+    )
+    requirement_id = requirement_response.json()["data"]["id"]
+    spec_response = await client.post(
+        f"/api/v1/requirements/{requirement_id}/spec/generate", headers=headers
+    )
+    return spec_response.json()["data"]["id"]
+
+
 async def test_runner_job_lease_event_and_artifact(api_client: AsyncClient) -> None:
     headers = await runner_auth_headers(api_client)
+    spec_id = await create_owned_spec(api_client, headers)
 
     create_response = await api_client.post(
         "/api/v1/dev-jobs",
         headers=headers,
-        json={"strategy": "parallel", "specId": "spec_001"},
+        json={"strategy": "parallel", "specId": spec_id},
     )
     assert create_response.status_code == 200
     job = create_response.json()["data"]
@@ -87,10 +103,11 @@ async def test_runner_execute_records_unavailable_engine(
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
     monkeypatch.setenv("AGENTPRO_RUNNER_EXECUTION_ENABLED", "true")
     headers = await runner_auth_headers(api_client)
+    spec_id = await create_owned_spec(api_client, headers)
     create_response = await api_client.post(
         "/api/v1/dev-jobs",
         headers=headers,
-        json={"strategy": "claude-code", "specId": "spec_missing_cli"},
+        json={"strategy": "claude-code", "specId": spec_id},
     )
     job_id = create_response.json()["data"]["id"]
 
@@ -133,10 +150,11 @@ async def test_runner_execute_invokes_available_cli(
     get_settings.cache_clear()
 
     headers = await runner_auth_headers(api_client)
+    spec_id = await create_owned_spec(api_client, headers)
     create_response = await api_client.post(
         "/api/v1/dev-jobs",
         headers=headers,
-        json={"strategy": "codex", "specId": "spec_fake_cli"},
+        json={"strategy": "codex", "specId": spec_id},
     )
     job_id = create_response.json()["data"]["id"]
 
@@ -165,3 +183,54 @@ async def test_runner_execute_invokes_available_cli(
 
     stream_response = await api_client.get(f"/api/v1/dev-jobs/{job_id}/stream", headers=headers)
     assert "fake codex" in stream_response.text or "执行完成" in stream_response.text
+
+
+async def test_create_job_rejects_other_users_spec(api_client: AsyncClient) -> None:
+    owner = await register_headers(api_client, "owner@example.com")
+    spec_id = await create_owned_spec(api_client, owner)
+
+    attacker = await register_headers(api_client, "attacker@example.com")
+    response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=attacker,
+        json={"strategy": "codex", "specId": spec_id},
+    )
+    assert response.status_code == 404
+
+
+async def test_create_job_rejects_other_users_requirement(api_client: AsyncClient) -> None:
+    owner = await register_headers(api_client, "owner2@example.com")
+    requirement_response = await api_client.post(
+        "/api/v1/requirements",
+        headers=owner,
+        json={"title": "私有需求", "initialMessage": "内部财务对账 agent"},
+    )
+    requirement_id = requirement_response.json()["data"]["id"]
+
+    attacker = await register_headers(api_client, "attacker2@example.com")
+    response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=attacker,
+        json={"strategy": "codex", "requirementId": requirement_id},
+    )
+    assert response.status_code == 404
+
+
+async def test_create_job_rejects_unknown_spec(api_client: AsyncClient) -> None:
+    headers = await register_headers(api_client, "nobody@example.com")
+    response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "codex", "specId": "spec_does_not_exist"},
+    )
+    assert response.status_code == 404
+
+
+async def test_create_job_requires_a_target(api_client: AsyncClient) -> None:
+    headers = await register_headers(api_client, "empty@example.com")
+    response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "codex"},
+    )
+    assert response.status_code == 400

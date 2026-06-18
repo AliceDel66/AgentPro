@@ -447,3 +447,29 @@
 - Commit：
   - 哈希：待提交
   - 信息：实现需求对话 token 级流式
+
+### 17. P0 DevJob 关联资源用户权限校验（R1）
+- 状态：已完成
+- 完成功能：
+  - 新增 `resolve_owned_targets`：创建 DevJob 时校验 requirementId/specId 存在且属于当前用户
+  - spec 经 `AgentSpec -> Requirement -> user_id` 间接校验所属权；两者同传时必须匹配
+  - requirementId 与 specId 至少需要一个，否则返回 400
+  - executor 防御式加固：`load_spec_for_job`/`load_requirement_for_job` 仅返回属于 job.user_id 的资源
+  - review 防御式加固：经 job.spec_id 反查 spec 时再次校验所属用户，杜绝越权读取
+  - 新增回归测试：跨用户 spec、跨用户 requirement、不存在 spec、无目标分别返回 404/400
+- 相关文件：
+  - backend/app/modules/runner/router.py
+  - backend/app/modules/runner/executor.py
+  - backend/app/modules/review/router.py
+  - backend/tests/test_runner.py
+  - backend/tests/test_review.py
+  - docs/Codex代码审查报告与后续开发计划.md
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（46 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：修复开发任务关联资源的用户权限校验

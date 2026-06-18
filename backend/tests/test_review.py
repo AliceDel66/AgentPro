@@ -21,12 +21,26 @@ async def review_auth_headers(client: AsyncClient) -> dict[str, str]:
     return await register_headers(client, "review@example.com")
 
 
+async def create_owned_spec(client: AsyncClient, headers: dict[str, str]) -> str:
+    requirement_response = await client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={"title": "评审需求", "initialMessage": "做一个发票核验 agent"},
+    )
+    requirement_id = requirement_response.json()["data"]["id"]
+    spec_response = await client.post(
+        f"/api/v1/requirements/{requirement_id}/spec/generate", headers=headers
+    )
+    return spec_response.json()["data"]["id"]
+
+
 async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
     headers = await review_auth_headers(api_client)
+    spec_id = await create_owned_spec(api_client, headers)
     job_response = await api_client.post(
         "/api/v1/dev-jobs",
         headers=headers,
-        json={"strategy": "codex", "specId": "spec_review_001"},
+        json={"strategy": "codex", "specId": spec_id},
     )
     job_id = job_response.json()["data"]["id"]
     await api_client.post(

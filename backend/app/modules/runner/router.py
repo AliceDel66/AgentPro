@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import record_audit
 from app.core.responses import ok
-from app.db.models import DevJob, DevJobArtifact, DevJobEvent, User
+from app.db.models import AgentSpec, DevJob, DevJobArtifact, DevJobEvent, Requirement, User
 from app.db.session import get_db_session
 from app.modules.auth.router import get_current_user
 from app.modules.runner.executor import execute_dev_job, runner_engines
@@ -50,12 +50,64 @@ async def get_owned_job(job_id: str, session: AsyncSession, user: User) -> DevJo
     return job
 
 
+async def resolve_owned_targets(
+    session: AsyncSession,
+    user: User,
+    requirement_id: str | None,
+    spec_id: str | None,
+) -> tuple[Requirement | None, AgentSpec | None]:
+    """Validate that any referenced requirement/spec exists and belongs to the user.
+
+    A spec is owned transitively via its requirement. Cross-user or missing targets
+    are rejected so a DevJob can never reference another user's requirement content.
+    """
+    requirement: Requirement | None = None
+    spec: AgentSpec | None = None
+
+    if requirement_id:
+        requirement = await session.get(Requirement, requirement_id)
+        if not requirement or requirement.user_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Requirement not found"
+            )
+
+    if spec_id:
+        spec = await session.get(AgentSpec, spec_id)
+        if not spec:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="AgentSpec not found"
+            )
+        spec_requirement = (
+            requirement
+            if requirement and requirement.id == spec.requirement_id
+            else await session.get(Requirement, spec.requirement_id)
+        )
+        if not spec_requirement or spec_requirement.user_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="AgentSpec not found"
+            )
+        if requirement and spec.requirement_id != requirement.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="specId 与 requirementId 不匹配",
+            )
+        requirement = requirement or spec_requirement
+
+    if not requirement and not spec:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="requirementId 或 specId 至少需要一个",
+        )
+    return requirement, spec
+
+
 @router.post("")
 async def create_dev_job(
     body: DevJobCreate,
     session: AsyncSession = db_session_dependency,
     current_user: User = current_user_dependency,
 ):
+    await resolve_owned_targets(session, current_user, body.requirementId, body.specId)
     job = DevJob(
         user_id=current_user.id,
         requirement_id=body.requirementId,

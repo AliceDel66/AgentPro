@@ -109,25 +109,41 @@ async def add_artifact(
     return artifact
 
 
-async def load_spec_for_job(session: AsyncSession, job: DevJob) -> AgentSpec | None:
-    if job.spec_id:
-        return await session.get(AgentSpec, job.spec_id)
-    if not job.requirement_id:
+async def _owned_requirement(
+    session: AsyncSession, requirement_id: str | None, user_id: str
+) -> Requirement | None:
+    if not requirement_id:
         return None
-    result = await session.execute(
-        select(AgentSpec)
-        .where(AgentSpec.requirement_id == job.requirement_id)
-        .order_by(AgentSpec.version.desc(), AgentSpec.updated_at.desc())
-    )
-    return result.scalars().first()
+    requirement = await session.get(Requirement, requirement_id)
+    if requirement and requirement.user_id == user_id:
+        return requirement
+    return None
+
+
+async def load_spec_for_job(session: AsyncSession, job: DevJob) -> AgentSpec | None:
+    spec: AgentSpec | None = None
+    if job.spec_id:
+        spec = await session.get(AgentSpec, job.spec_id)
+    elif job.requirement_id:
+        result = await session.execute(
+            select(AgentSpec)
+            .where(AgentSpec.requirement_id == job.requirement_id)
+            .order_by(AgentSpec.version.desc(), AgentSpec.updated_at.desc())
+        )
+        spec = result.scalars().first()
+    if spec is None:
+        return None
+    # Defense-in-depth: never embed a spec whose requirement isn't owned by the job's user.
+    owner = await _owned_requirement(session, spec.requirement_id, job.user_id)
+    return spec if owner else None
 
 
 async def load_requirement_for_job(session: AsyncSession, job: DevJob) -> Requirement | None:
     if job.requirement_id:
-        return await session.get(Requirement, job.requirement_id)
+        return await _owned_requirement(session, job.requirement_id, job.user_id)
     spec = await load_spec_for_job(session, job)
     if spec:
-        return await session.get(Requirement, spec.requirement_id)
+        return await _owned_requirement(session, spec.requirement_id, job.user_id)
     return None
 
 

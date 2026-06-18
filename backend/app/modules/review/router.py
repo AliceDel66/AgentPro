@@ -84,7 +84,11 @@ async def create_review(
             status_code=status.HTTP_400_BAD_REQUEST, detail="jobId or specId required"
         )
     if job and job.spec_id and not spec:
-        spec = await session.get(AgentSpec, job.spec_id)
+        candidate = await session.get(AgentSpec, job.spec_id)
+        if candidate:
+            candidate_requirement = await session.get(Requirement, candidate.requirement_id)
+            if candidate_requirement and candidate_requirement.user_id == current_user.id:
+                spec = candidate
 
     event_result = (
         await session.execute(select(DevJobEvent).where(DevJobEvent.job_id == job.id))
