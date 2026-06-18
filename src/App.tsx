@@ -10,10 +10,12 @@ import { DispatchPage } from "./pages/workspace/DispatchPage";
 import { FollowupPage } from "./pages/workspace/FollowupPage";
 import { LibraryPage } from "./pages/workspace/LibraryPage";
 import { MonitorPage } from "./pages/workspace/MonitorPage";
+import { ReportsPage } from "./pages/workspace/ReportsPage";
 import { ReviewPage } from "./pages/workspace/ReviewPage";
 import { SettingsPage } from "./pages/workspace/SettingsPage";
 import { SpecPage } from "./pages/workspace/SpecPage";
 import { ShellPlaceholder } from "./pages/workspace/ShellPlaceholder";
+import { canEnterWorkflowRoute, fallbackRouteForLockedWorkflow } from "./lib/workflow";
 import { useAuthStore } from "./stores/authStore";
 import { useWorkflowStore } from "./stores/workflowStore";
 import type { AppRoute } from "./types";
@@ -27,15 +29,26 @@ export default function App() {
   const activeRequirementId = useWorkflowStore((state) => state.activeRequirementId);
   const activeSpecId = useWorkflowStore((state) => state.activeSpecId);
   const activeJobId = useWorkflowStore((state) => state.activeJobId);
+  const activeJobStatus = useWorkflowStore((state) => state.activeJobStatus);
   const activeReviewId = useWorkflowStore((state) => state.activeReviewId);
   const setActiveRequirementId = useWorkflowStore((state) => state.setActiveRequirementId);
   const setActiveSpecId = useWorkflowStore((state) => state.setActiveSpecId);
   const setActiveJobId = useWorkflowStore((state) => state.setActiveJobId);
+  const setActiveJobStatus = useWorkflowStore((state) => state.setActiveJobStatus);
   const setActiveReviewId = useWorkflowStore((state) => state.setActiveReviewId);
 
   const status = useAuthStore((state) => state.status);
   const bootstrap = useAuthStore((state) => state.bootstrap);
   const authenticated = status === "authenticated";
+  const workflowContext = { activeRequirementId, activeSpecId, activeJobId, activeJobStatus, activeReviewId };
+
+  const guardedNavigate = (nextRoute: AppRoute) => {
+    if (!canEnterWorkflowRoute(nextRoute, workflowContext)) {
+      setRoute(fallbackRouteForLockedWorkflow(nextRoute, workflowContext));
+      return;
+    }
+    setRoute(nextRoute);
+  };
 
   // Restore the session on startup so a refresh keeps the user logged in.
   useEffect(() => {
@@ -48,6 +61,13 @@ export default function App() {
       setRoute("library");
     }
   }, [booted, authenticated, route]);
+
+  useEffect(() => {
+    if (!booted || !authenticated || AUTH_ROUTES.includes(route)) return;
+    if (!canEnterWorkflowRoute(route, workflowContext)) {
+      setRoute(fallbackRouteForLockedWorkflow(route, workflowContext));
+    }
+  }, [authenticated, booted, route, activeRequirementId, activeSpecId, activeJobId, activeJobStatus, activeReviewId]);
 
   if (!booted) {
     return (
@@ -68,26 +88,39 @@ export default function App() {
   if (route === "login") return <LoginPage navigate={setRoute} />;
   if (route === "register") return <RegisterPage navigate={setRoute} />;
   if (route === "forgot") return <ForgotPasswordPage navigate={setRoute} />;
-  if (route === "setup") return <SetupPage navigate={setRoute} />;
+  if (route === "setup") return <SetupPage navigate={guardedNavigate} />;
 
   return (
-    <AppShell navigate={setRoute} route={route}>
+    <AppShell navigate={guardedNavigate} route={route}>
       {route === "chat" ? (
-        <ChatPage activeRequirementId={activeRequirementId} navigate={setRoute} setActiveRequirementId={setActiveRequirementId} />
+        <ChatPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} setActiveRequirementId={setActiveRequirementId} />
       ) : route === "followup" ? (
-        <FollowupPage activeRequirementId={activeRequirementId} navigate={setRoute} />
+        <FollowupPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} />
       ) : route === "spec" ? (
-        <SpecPage activeRequirementId={activeRequirementId} navigate={setRoute} setActiveSpecId={setActiveSpecId} />
+        <SpecPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} setActiveSpecId={setActiveSpecId} />
       ) : route === "library" ? (
-        <LibraryPage navigate={setRoute} setActiveRequirementId={setActiveRequirementId} />
+        <LibraryPage navigate={guardedNavigate} setActiveRequirementId={setActiveRequirementId} />
       ) : route === "dispatch" ? (
-        <DispatchPage activeRequirementId={activeRequirementId} activeSpecId={activeSpecId} navigate={setRoute} setActiveJobId={setActiveJobId} />
+        <DispatchPage
+          activeRequirementId={activeRequirementId}
+          activeSpecId={activeSpecId}
+          navigate={guardedNavigate}
+          setActiveJobId={setActiveJobId}
+          setActiveJobStatus={setActiveJobStatus}
+        />
       ) : route === "monitor" ? (
-        <MonitorPage activeJobId={activeJobId} navigate={setRoute} />
+        <MonitorPage activeJobId={activeJobId} activeSpecId={activeSpecId} navigate={guardedNavigate} setActiveJobStatus={setActiveJobStatus} />
       ) : route === "review" ? (
-        <ReviewPage activeJobId={activeJobId} activeReviewId={activeReviewId} activeSpecId={activeSpecId} navigate={setRoute} setActiveReviewId={setActiveReviewId} />
+        <ReviewPage activeJobId={activeJobId} activeReviewId={activeReviewId} activeSpecId={activeSpecId} navigate={guardedNavigate} setActiveReviewId={setActiveReviewId} />
+      ) : route === "reports" ? (
+        <ReportsPage
+          navigate={guardedNavigate}
+          setActiveJobId={setActiveJobId}
+          setActiveJobStatus={setActiveJobStatus}
+          setActiveReviewId={setActiveReviewId}
+        />
       ) : route === "settings" ? (
-        <SettingsPage navigate={setRoute} />
+        <SettingsPage navigate={guardedNavigate} />
       ) : (
         <ShellPlaceholder route={route} />
       )}

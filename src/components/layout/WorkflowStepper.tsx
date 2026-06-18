@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
-import { WORKFLOW_STEPS, workflowStepIndexForRoute } from "../../lib/workflow";
+import { canEnterWorkflowRoute, lockedWorkflowReason, WORKFLOW_STEPS, workflowStepIndexForRoute } from "../../lib/workflow";
+import { useWorkflowStore } from "../../stores/workflowStore";
 import type { AppRoute, Navigate } from "../../types";
 
 interface WorkflowStepperProps {
@@ -13,6 +14,13 @@ interface WorkflowStepperProps {
  */
 export function WorkflowStepper({ route, navigate }: WorkflowStepperProps) {
   const currentIndex = workflowStepIndexForRoute(route);
+  const activeRequirementId = useWorkflowStore((state) => state.activeRequirementId);
+  const activeSpecId = useWorkflowStore((state) => state.activeSpecId);
+  const activeJobId = useWorkflowStore((state) => state.activeJobId);
+  const activeJobStatus = useWorkflowStore((state) => state.activeJobStatus);
+  const activeReviewId = useWorkflowStore((state) => state.activeReviewId);
+  const workflowContext = { activeRequirementId, activeSpecId, activeJobId, activeJobStatus, activeReviewId };
+
   if (currentIndex < 0) return null;
 
   return (
@@ -20,17 +28,25 @@ export function WorkflowStepper({ route, navigate }: WorkflowStepperProps) {
       {WORKFLOW_STEPS.map((step, index) => {
         const done = index < currentIndex;
         const active = index === currentIndex;
+        const lockedReason = lockedWorkflowReason(step.primaryRoute, workflowContext);
+        const unlocked = canEnterWorkflowRoute(step.primaryRoute, workflowContext);
         return (
           <div className="flex items-center gap-1" key={step.key}>
             <button
               type="button"
               aria-current={active ? "step" : undefined}
+              disabled={!unlocked}
+              title={lockedReason ?? step.label}
               className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${
                 active
                   ? "bg-agent-pale text-agent-primary"
-                  : "text-agent-subtle hover:bg-[#F0F4FA] hover:text-agent-secondary"
+                  : unlocked
+                    ? "text-agent-subtle hover:bg-[#F0F4FA] hover:text-agent-secondary"
+                    : "cursor-not-allowed text-agent-subtle opacity-55"
               }`}
-              onClick={() => navigate(step.primaryRoute)}
+              onClick={() => {
+                if (unlocked) navigate(step.primaryRoute);
+              }}
             >
               <span
                 className={`grid h-[18px] w-[18px] place-items-center rounded-full text-[10px] font-bold ${

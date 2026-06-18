@@ -3,15 +3,26 @@ import type { ReviewReport } from "./types";
 
 const mockReview: ReviewReport = {
   id: "review_mock_001",
+  jobId: "job_mock_parallel_001",
+  specId: "spec_mock_001",
+  requirementId: "req_mock_001",
+  requirementTitle: "示例 Agent",
+  createdAt: new Date().toISOString(),
   recommendedEngine: "claude-code",
   score: 88,
   hallucinationRisk: 15,
   stabilityScore: 91,
-  performanceScore: 85
+  performanceScore: 85,
+  status: "draft",
+  summary: "Mock 评审报告"
 };
 
 export function getReviewReport(reviewId: string) {
   return apiGet(`/reviews/${reviewId}`, mockReview);
+}
+
+export function listReviewReports() {
+  return apiGet<ReviewReport[]>("/reviews", [mockReview]);
 }
 
 export function getLatestReview(params: { jobId?: string; specId?: string }) {
@@ -23,6 +34,27 @@ export function getLatestReview(params: { jobId?: string; specId?: string }) {
 
 export function createReviewReport(payload: { jobId?: string; specId?: string }) {
   return apiPost("/reviews", payload, mockReview);
+}
+
+export function regenerateReviewReport(reviewId: string) {
+  return apiPost<object, ReviewReport>(`/reviews/${reviewId}/regenerate`, {}, {
+    ...mockReview,
+    id: "review_mock_regenerated"
+  });
+}
+
+export function optimizeFromReviewReport(reviewId: string) {
+  return apiPost<object, ReviewReport>(`/reviews/${reviewId}/optimize`, {}, {
+    ...mockReview,
+    optimizationJob: {
+      id: "job_mock_optimize",
+      status: "running",
+      progress: 1,
+      engines: ["codex"],
+      strategy: "codex",
+      sourceReviewId: reviewId
+    }
+  });
 }
 
 export function acceptReviewRecommendation(reviewId: string) {

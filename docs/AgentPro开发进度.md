@@ -693,3 +693,37 @@
 - Commit：
   - 哈希：待提交
   - 信息：升级需求库为工作流入口
+
+### 28. Workflow 收紧、真实开发状态与报告档案
+- 状态：已完成
+- 完成功能：
+  - 开发调度点击“开始真实开发”后先创建 DevJob，立即写入 activeJobId/activeJobStatus 并进入监控页，再后台触发异步真实 Runner
+  - MonitorPage 增加 2 秒轮询，持续读取 DevJob 与事件日志，终态后停止轮询
+  - MonitorPage 无 activeJobId 时展示“暂无开发任务”空状态，不再渲染伪 Runner 卡片、0% 进度或空日志
+  - 侧边栏移除开发调度、并行监控、自动评审全局入口，新增“报告档案”
+  - WorkflowStepper 按 activeRequirementId/activeSpecId/activeJobId/activeJobStatus/activeReviewId 禁用未解锁步骤，并提供锁定原因
+  - 新增 ReportsPage，支持历史报告列表、查看详情、重新生成评审、基于报告创建优化任务并停留档案页轮询状态
+  - Review 路由允许通过 activeReviewId 从报告档案进入，避免历史报告详情被当前任务状态误拦截
+- 相关文件：
+  - src/App.tsx
+  - src/types.ts
+  - src/stores/workflowStore.ts
+  - src/lib/workflow.ts
+  - src/components/layout/AppShell.tsx
+  - src/components/layout/WorkflowStepper.tsx
+  - src/pages/workspace/DispatchPage.tsx
+  - src/pages/workspace/MonitorPage.tsx
+  - src/pages/workspace/ReportsPage.tsx
+  - src/services/runnerService.ts
+  - src/services/reviewService.ts
+  - src/services/types.ts
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（56 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：本提交
+  - 信息：收紧工作流并新增报告档案页

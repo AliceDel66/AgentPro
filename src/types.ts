@@ -10,7 +10,7 @@ export type AppRoute =
   | "dispatch"
   | "monitor"
   | "review"
+  | "reports"
   | "settings";
 
 export type Navigate = (route: AppRoute) => void;
-

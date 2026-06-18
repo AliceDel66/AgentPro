@@ -1,0 +1,283 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Archive, Eye, RefreshCcw, WandSparkles } from "lucide-react";
+import { AppButton } from "../../components/common/Button";
+import { LoadingState } from "../../components/common/LoadingState";
+import { StatusChip } from "../../components/common/StatusChip";
+import { TERMINAL_JOB_STATUSES } from "../../lib/workflow";
+import { listReviewReports, optimizeFromReviewReport, regenerateReviewReport } from "../../services/reviewService";
+import type { ReviewReport, RunnerJob } from "../../services/types";
+import type { Navigate } from "../../types";
+
+interface ReportsPageProps {
+  navigate: Navigate;
+  setActiveJobId: (jobId: string | null) => void;
+  setActiveJobStatus: (status: string | null) => void;
+  setActiveReviewId: (reviewId: string | null) => void;
+}
+
+type ReportAction = { type: "regenerate" | "optimize"; id: string } | null;
+
+export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setActiveReviewId }: ReportsPageProps) {
+  const [reports, setReports] = useState<ReviewReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [action, setAction] = useState<ReportAction>(null);
+
+  const hasActiveOptimization = useMemo(
+    () => reports.some((report) => report.optimizationJob && !TERMINAL_JOB_STATUSES.has(report.optimizationJob.status)),
+    [reports]
+  );
+
+  const loadReports = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setErrorMessage(null);
+    try {
+      const result = await listReviewReports();
+      setReports(result.data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "读取报告档案失败";
+      setErrorMessage(message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadReports();
+  }, [loadReports]);
+
+  useEffect(() => {
+    if (!hasActiveOptimization) return undefined;
+    const timer = window.setInterval(() => void loadReports(true), 3000);
+    return () => window.clearInterval(timer);
+  }, [hasActiveOptimization, loadReports]);
+
+  const openReport = (report: ReviewReport) => {
+    setActiveJobId(report.jobId ?? null);
+    setActiveJobStatus(report.jobId ? "completed" : null);
+    setActiveReviewId(report.id);
+    navigate("review");
+  };
+
+  const handleRegenerate = async (report: ReviewReport) => {
+    if (action) return;
+    setAction({ type: "regenerate", id: report.id });
+    setErrorMessage(null);
+    try {
+      const result = await regenerateReviewReport(report.id);
+      setReports((current) => [result.data, ...current.filter((item) => item.id !== result.data.id)]);
+      setActiveReviewId(result.data.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "重新生成评审失败";
+      setErrorMessage(message);
+    } finally {
+      setAction(null);
+    }
+  };
+
+  const handleOptimize = async (report: ReviewReport) => {
+    if (action) return;
+    setAction({ type: "optimize", id: report.id });
+    setErrorMessage(null);
+    try {
+      const result = await optimizeFromReviewReport(report.id);
+      setReports((current) => current.map((item) => (item.id === result.data.id ? result.data : item)));
+      if (result.data.optimizationJob) {
+        setActiveJobId(result.data.optimizationJob.id);
+        setActiveJobStatus(result.data.optimizationJob.status);
+      }
+      void loadReports(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "创建优化任务失败";
+      setErrorMessage(message);
+    } finally {
+      setAction(null);
+    }
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-agent-bg px-9 py-8 pb-24">
+      <div className="mx-auto max-w-[1040px]">
+        <div className="mb-7 flex items-center justify-between">
+          <div>
+            <h1 className="m-0 text-[22px] font-bold text-agent-ink">报告档案</h1>
+            <div className="mt-1 text-[13px] text-agent-muted">集中查看历史评审报告，并基于报告发起重新评审或优化迭代。</div>
+          </div>
+          <AppButton disabled={loading} type="button" variant="secondary" onClick={() => void loadReports()}>
+            <RefreshCcw size={16} />
+            刷新
+          </AppButton>
+        </div>
+
+        {errorMessage ? <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
+        {loading ? <LoadingState className="rounded-xl border border-agent-border bg-white px-6 py-5" label="正在读取报告档案..." /> : null}
+
+        {!loading && !reports.length ? (
+          <div className="rounded-xl border border-dashed border-agent-border bg-white px-8 py-14 text-center">
+            <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-agent-pale text-agent-primary">
+              <Archive size={24} />
+            </div>
+            <div className="text-lg font-semibold text-agent-ink">暂无评审报告</div>
+            <div className="mx-auto mt-2 max-w-[420px] text-sm leading-7 text-agent-muted">
+              完成真实开发并生成自动评审后，报告会沉淀在这里，后续可直接重新生成或发起优化。
+            </div>
+            <div className="mt-6 flex justify-center">
+              <AppButton type="button" variant="secondary" onClick={() => navigate("library")}>
+                返回需求库
+              </AppButton>
+            </div>
+          </div>
+        ) : null}
+
+        {!loading && reports.length ? (
+          <div className="grid gap-4">
+            {reports.map((report) => (
+              <ReportCard
+                action={action}
+                key={report.id}
+                report={report}
+                onOpen={() => openReport(report)}
+                onOptimize={() => void handleOptimize(report)}
+                onRegenerate={() => void handleRegenerate(report)}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ReportCard({
+  report,
+  action,
+  onOpen,
+  onRegenerate,
+  onOptimize
+}: {
+  report: ReviewReport;
+  action: ReportAction;
+  onOpen: () => void;
+  onRegenerate: () => void;
+  onOptimize: () => void;
+}) {
+  const optimizationRunning = Boolean(report.optimizationJob && !TERMINAL_JOB_STATUSES.has(report.optimizationJob.status));
+  const regenerating = action?.type === "regenerate" && action.id === report.id;
+  const optimizing = action?.type === "optimize" && action.id === report.id;
+
+  return (
+    <div className="rounded-xl border border-agent-border bg-white p-5">
+      <div className="flex items-start justify-between gap-5">
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <h2 className="m-0 truncate text-base font-semibold text-agent-ink">{report.requirementTitle ?? "未命名需求"}</h2>
+            <StatusChip tone={reviewTone(report.status)}>{reviewStatusLabel(report.status)}</StatusChip>
+            {report.optimizationJob ? <StatusChip tone={jobTone(report.optimizationJob)}>{optimizationLabel(report.optimizationJob)}</StatusChip> : null}
+          </div>
+          <div className="grid gap-1 text-[12px] leading-6 text-agent-muted">
+            <div>
+              Report ID：{report.id} · Job ID：{report.jobId ?? "未关联"} · Spec ID：{report.specId ?? "未关联"}
+            </div>
+            <div>创建时间：{formatDate(report.createdAt)}</div>
+          </div>
+        </div>
+
+        <div className="grid min-w-[108px] justify-items-end">
+          <div className="text-[30px] font-bold text-agent-primary">
+            {report.score}
+            <span className="text-sm font-normal text-agent-muted">/100</span>
+          </div>
+          <div className="text-[12px] text-agent-muted">推荐：{engineLabel(report.recommendedEngine)}</div>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-[10px] bg-[#F8FAFC] px-4 py-3 text-[13px] leading-6 text-agent-secondary">
+        {report.summary ?? "暂无摘要。"}
+      </div>
+
+      {report.optimizationJob ? (
+        <div className="mt-3 rounded-[10px] bg-[#F0F7FF] px-4 py-3 text-[12px] leading-6 text-agent-secondary">
+          最新优化任务：{report.optimizationJob.id} · {optimizationLabel(report.optimizationJob)} · 进度 {report.optimizationJob.progress}%
+        </div>
+      ) : null}
+
+      <div className="mt-5 flex flex-wrap justify-end gap-3">
+        <AppButton type="button" variant="ghost" onClick={onOpen}>
+          <Eye size={16} />
+          查看详情
+        </AppButton>
+        <AppButton disabled={Boolean(action)} loading={regenerating} type="button" variant="secondary" onClick={onRegenerate}>
+          <RefreshCcw size={16} />
+          {regenerating ? "生成中..." : "重新生成"}
+        </AppButton>
+        <AppButton disabled={Boolean(action) || optimizationRunning} loading={optimizing} type="button" onClick={onOptimize}>
+          <WandSparkles size={16} />
+          {optimizationRunning ? "优化中" : optimizing ? "创建中..." : "优化"}
+        </AppButton>
+      </div>
+    </div>
+  );
+}
+
+function reviewStatusLabel(status?: string) {
+  const labels: Record<string, string> = {
+    draft: "草稿",
+    accepted: "已采纳",
+    rework_requested: "需返工",
+    merge_planned: "已规划合并"
+  };
+  return labels[status ?? "draft"] ?? status ?? "草稿";
+}
+
+function reviewTone(status?: string): "blue" | "gray" | "green" | "orange" {
+  switch (status) {
+    case "accepted":
+      return "green";
+    case "rework_requested":
+    case "merge_planned":
+      return "orange";
+    case "draft":
+      return "blue";
+    default:
+      return "gray";
+  }
+}
+
+function jobTone(job: RunnerJob): "blue" | "cyan" | "green" | "orange" | "red" {
+  switch (job.status) {
+    case "completed":
+      return "green";
+    case "completed_with_warnings":
+      return "orange";
+    case "failed":
+    case "blocked":
+      return "red";
+    case "running":
+      return "cyan";
+    default:
+      return "blue";
+  }
+}
+
+function optimizationLabel(job: RunnerJob) {
+  const labels: Record<string, string> = {
+    queued: "优化待执行",
+    running: "优化中",
+    completed: "优化完成",
+    completed_with_warnings: "优化完成但有警告",
+    failed: "优化失败",
+    blocked: "优化阻塞"
+  };
+  return labels[job.status] ?? `优化：${job.status}`;
+}
+
+function engineLabel(engine: ReviewReport["recommendedEngine"]) {
+  return engine === "claude-code" ? "Claude Code" : "Codex";
+}
+
+function formatDate(value?: string) {
+  if (!value) return "未记录";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", { hour12: false });
+}

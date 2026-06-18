@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { BarChart3, Bell, BotMessageSquare, FileText, FolderOpen, Monitor, Play, Settings } from "lucide-react";
+import { Archive, Bell, BotMessageSquare, FileText, FolderOpen, Settings } from "lucide-react";
 import { getUserAvatarInitial, getUserDisplayName, useAuthStore } from "../../stores/authStore";
 import { WorkflowStepper } from "./WorkflowStepper";
 import type { AppRoute, Navigate } from "../../types";
@@ -18,6 +18,7 @@ const pageTitles: Partial<Record<AppRoute, string>> = {
   dispatch: "开发调度",
   monitor: "并行开发监控",
   review: "自动评审报告",
+  reports: "报告档案",
   settings: "设置"
 };
 
@@ -26,9 +27,7 @@ const navItems = [
   { route: "spec" as const, label: "需求草案", icon: FileText, group: ["spec"] },
   { route: "library" as const, label: "需求库", icon: FolderOpen, group: ["library"] },
   { divider: true },
-  { route: "dispatch" as const, label: "开发调度", icon: Play, group: ["dispatch"] },
-  { route: "monitor" as const, label: "并行监控", icon: Monitor, group: ["monitor"] },
-  { route: "review" as const, label: "自动评审", icon: BarChart3, group: ["review"] }
+  { route: "reports" as const, label: "报告档案", icon: Archive, group: ["reports", "review"] }
 ] as const;
 
 function isActive(route: AppRoute, group?: readonly string[]) {

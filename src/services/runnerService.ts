@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from "./apiClient";
-import type { RunnerJob, RunnerRequest } from "./types";
+import type { RunnerEvent, RunnerJob, RunnerRequest } from "./types";
 
 const mockJob: RunnerJob = {
   id: "job_mock_parallel_001",
@@ -16,8 +16,16 @@ export function executeRunnerJob(jobId: string) {
   return apiPost(`/dev-jobs/${jobId}/execute`, {}, mockJob);
 }
 
+export function executeRunnerJobAsync(jobId: string) {
+  return apiPost(`/dev-jobs/${jobId}/execute/async`, {}, mockJob);
+}
+
 export function getRunnerJob(jobId: string) {
   return apiGet(`/dev-jobs/${jobId}`, mockJob);
+}
+
+export function getRunnerEvents(jobId: string) {
+  return apiGet<RunnerEvent[]>(`/dev-jobs/${jobId}/events`, []);
 }
 
 export function leaseRunnerJob(jobId: string, runnerId: string) {

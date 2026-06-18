@@ -5,10 +5,12 @@ interface WorkflowState {
   activeRequirementId: string | null;
   activeSpecId: string | null;
   activeJobId: string | null;
+  activeJobStatus: string | null;
   activeReviewId: string | null;
   setActiveRequirementId: (id: string | null) => void;
   setActiveSpecId: (id: string | null) => void;
   setActiveJobId: (id: string | null) => void;
+  setActiveJobStatus: (status: string | null) => void;
   setActiveReviewId: (id: string | null) => void;
   resetWorkflow: () => void;
 }
@@ -24,18 +26,25 @@ export const useWorkflowStore = create<WorkflowState>()(
       activeRequirementId: null,
       activeSpecId: null,
       activeJobId: null,
+      activeJobStatus: null,
       activeReviewId: null,
       setActiveRequirementId: (id) =>
         set((state) =>
           id === state.activeRequirementId
             ? { activeRequirementId: id }
-            : { activeRequirementId: id, activeSpecId: null, activeJobId: null, activeReviewId: null }
+            : { activeRequirementId: id, activeSpecId: null, activeJobId: null, activeJobStatus: null, activeReviewId: null }
         ),
       setActiveSpecId: (id) => set({ activeSpecId: id }),
-      setActiveJobId: (id) => set({ activeJobId: id }),
+      setActiveJobId: (id) =>
+        set((state) =>
+          id === state.activeJobId
+            ? { activeJobId: id }
+            : { activeJobId: id, activeJobStatus: null, activeReviewId: null }
+        ),
+      setActiveJobStatus: (status) => set({ activeJobStatus: status }),
       setActiveReviewId: (id) => set({ activeReviewId: id }),
       resetWorkflow: () =>
-        set({ activeRequirementId: null, activeSpecId: null, activeJobId: null, activeReviewId: null })
+        set({ activeRequirementId: null, activeSpecId: null, activeJobId: null, activeJobStatus: null, activeReviewId: null })
     }),
     {
       name: "agentpro.workflow",

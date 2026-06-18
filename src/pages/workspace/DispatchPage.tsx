@@ -2,7 +2,7 @@ import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { StatusChip } from "../../components/common/StatusChip";
-import { executeRunnerJob, startRunnerJob } from "../../services/runnerService";
+import { executeRunnerJobAsync, startRunnerJob } from "../../services/runnerService";
 import type { RunnerRequest } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -11,6 +11,7 @@ interface DispatchPageProps {
   activeSpecId: string | null;
   navigate: Navigate;
   setActiveJobId: (jobId: string | null) => void;
+  setActiveJobStatus: (status: string | null) => void;
 }
 
 const strategies: Array<[string, string, string, RunnerRequest["strategy"], boolean]> = [
@@ -23,7 +24,7 @@ const pipeline = ["创建隔离工作区", "读取需求文档", "代码实现",
 
 const ready = ["开发任务包已准备好", "Codex 引擎可用", "Claude Code 引擎可用"];
 
-export function DispatchPage({ activeRequirementId, activeSpecId, navigate, setActiveJobId }: DispatchPageProps) {
+export function DispatchPage({ activeRequirementId, activeSpecId, navigate, setActiveJobId, setActiveJobStatus }: DispatchPageProps) {
   const [strategy, setStrategy] = useState<RunnerRequest["strategy"]>("parallel");
   const [starting, setStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -43,9 +44,17 @@ export function DispatchPage({ activeRequirementId, activeSpecId, navigate, setA
         specId: activeSpecId ?? undefined,
         requirementId: activeRequirementId ?? undefined
       });
-      const executeResult = await executeRunnerJob(result.data.id);
-      setActiveJobId(executeResult.data.id);
+      setActiveJobId(result.data.id);
+      setActiveJobStatus(result.data.status ?? "queued");
       navigate("monitor");
+      void executeRunnerJobAsync(result.data.id)
+        .then((executeResult) => {
+          setActiveJobStatus(executeResult.data.status);
+        })
+        .catch((error) => {
+          console.error("[AgentPro] 启动真实 Runner 失败", error);
+          setActiveJobStatus("blocked");
+        });
     } catch (error) {
       const message = error instanceof Error ? error.message : "创建开发任务失败";
       setErrorMessage(message);
@@ -122,8 +131,8 @@ export function DispatchPage({ activeRequirementId, activeSpecId, navigate, setA
         {errorMessage ? <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
 
         <div className="flex justify-end gap-3">
-          <AppButton type="button" variant="secondary" onClick={() => navigate("library")}>
-            返回需求库
+          <AppButton type="button" variant="secondary" onClick={() => navigate("spec")}>
+            返回需求草案
           </AppButton>
           <AppButton disabled={starting} loading={starting} type="button" onClick={() => void handleStart()}>
             {starting ? "启动中..." : "开始真实开发"}

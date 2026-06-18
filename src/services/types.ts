@@ -97,10 +97,25 @@ export interface RunnerJob {
   strategy?: "codex" | "claude-code" | "parallel";
   requirementId?: string | null;
   specId?: string | null;
+  sourceReviewId?: string | null;
+}
+
+export interface RunnerEvent {
+  id: string;
+  level: "debug" | "info" | "warning" | "error";
+  phase: string;
+  message: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface ReviewReport {
   id: string;
+  jobId?: string | null;
+  specId?: string | null;
+  requirementId?: string | null;
+  requirementTitle?: string | null;
+  createdAt?: string;
   recommendedEngine: "codex" | "claude-code";
   score: number;
   hallucinationRisk: number;
@@ -109,4 +124,5 @@ export interface ReviewReport {
   status?: string;
   summary?: string;
   findings?: Array<Record<string, unknown>>;
+  optimizationJob?: RunnerJob | null;
 }

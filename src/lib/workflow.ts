@@ -23,6 +23,62 @@ export function workflowStepIndexForRoute(route: AppRoute): number {
   return WORKFLOW_STEPS.findIndex((step) => step.routes.includes(route));
 }
 
+export const TERMINAL_JOB_STATUSES = new Set(["completed", "completed_with_warnings", "failed", "blocked"]);
+
+export interface WorkflowContext {
+  activeRequirementId: string | null;
+  activeSpecId: string | null;
+  activeJobId: string | null;
+  activeJobStatus: string | null;
+  activeReviewId?: string | null;
+}
+
+export function canEnterWorkflowRoute(route: AppRoute, context: WorkflowContext): boolean {
+  switch (route) {
+    case "spec":
+      return Boolean(context.activeRequirementId);
+    case "dispatch":
+      return Boolean(context.activeSpecId);
+    case "monitor":
+      return Boolean(context.activeJobId);
+    case "review":
+      return Boolean(context.activeReviewId || (context.activeJobId && context.activeJobStatus && TERMINAL_JOB_STATUSES.has(context.activeJobStatus)));
+    default:
+      return true;
+  }
+}
+
+export function lockedWorkflowReason(route: AppRoute, context: WorkflowContext): string | null {
+  if (canEnterWorkflowRoute(route, context)) return null;
+  switch (route) {
+    case "spec":
+      return "请先选择或创建需求";
+    case "dispatch":
+      return "请先生成并确认 AgentSpec";
+    case "monitor":
+      return "请先从开发调度创建任务";
+    case "review":
+      return context.activeJobId ? "请等待开发任务结束" : "请先创建开发任务";
+    default:
+      return null;
+  }
+}
+
+export function fallbackRouteForLockedWorkflow(route: AppRoute, context: WorkflowContext): AppRoute {
+  switch (route) {
+    case "spec":
+      return context.activeRequirementId ? "spec" : "library";
+    case "dispatch":
+      return context.activeRequirementId ? "spec" : "library";
+    case "monitor":
+      return context.activeSpecId ? "dispatch" : "library";
+    case "review":
+      return context.activeJobId ? "monitor" : context.activeSpecId ? "dispatch" : "library";
+    default:
+      return route;
+  }
+}
+
 export interface NextAction {
   label: string;
   route: AppRoute;
