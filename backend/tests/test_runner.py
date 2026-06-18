@@ -129,6 +129,32 @@ async def test_runner_execute_records_unavailable_engine(
     assert any("CLI 未安装" in message for message in messages)
 
 
+async def test_runner_package_returns_prompt_without_executing(api_client: AsyncClient) -> None:
+    headers = await runner_auth_headers(api_client)
+    spec_id = await create_owned_spec(api_client, headers)
+    create_response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "parallel", "specId": spec_id},
+    )
+    job_id = create_response.json()["data"]["id"]
+
+    package_response = await api_client.get(
+        f"/api/v1/dev-jobs/{job_id}/runner-package",
+        headers=headers,
+    )
+
+    assert package_response.status_code == 200
+    package = package_response.json()["data"]
+    assert package["id"] == job_id
+    assert package["engines"] == ["codex", "claude-code"]
+    assert "AgentPro 开发任务" in package["prompt"]
+    assert spec_id in package["prompt"]
+
+    job_response = await api_client.get(f"/api/v1/dev-jobs/{job_id}", headers=headers)
+    assert job_response.json()["data"]["status"] == "queued"
+
+
 async def test_runner_execute_invokes_available_cli(
     api_client: AsyncClient,
     monkeypatch,

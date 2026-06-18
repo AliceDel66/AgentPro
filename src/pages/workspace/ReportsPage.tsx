@@ -4,6 +4,7 @@ import { AppButton } from "../../components/common/Button";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
 import { TERMINAL_JOB_STATUSES } from "../../lib/workflow";
+import { executeRunnerJobOnDesktop } from "../../services/localRunnerService";
 import { listReviewReports, optimizeFromReviewReport, regenerateReviewReport } from "../../services/reviewService";
 import type { ReviewReport, RunnerJob } from "../../services/types";
 import type { Navigate } from "../../types";
@@ -85,6 +86,16 @@ export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setA
       if (result.data.optimizationJob) {
         setActiveJobId(result.data.optimizationJob.id);
         setActiveJobStatus(result.data.optimizationJob.status);
+        void executeRunnerJobOnDesktop(result.data.optimizationJob.id, {
+          createReviewOnComplete: true,
+          onStatus: setActiveJobStatus
+        })
+          .then(() => void loadReports(true))
+          .catch((error) => {
+            console.error("[AgentPro] 报告优化本机 Runner 执行失败", error);
+            setActiveJobStatus("blocked");
+            void loadReports(true);
+          });
       }
       void loadReports(true);
     } catch (error) {

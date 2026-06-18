@@ -100,6 +100,16 @@ export interface RunnerJob {
   sourceReviewId?: string | null;
 }
 
+export interface RunnerPackage {
+  id: string;
+  strategy: "codex" | "claude-code" | "parallel";
+  engines: Array<"codex" | "claude-code">;
+  prompt: string;
+  requirementId?: string | null;
+  specId?: string | null;
+  sourceReviewId?: string | null;
+}
+
 export interface RunnerEvent {
   id: string;
   level: "debug" | "info" | "warning" | "error";

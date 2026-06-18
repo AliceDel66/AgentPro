@@ -1,6 +1,4 @@
-from collections.abc import Callable
-
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +14,7 @@ from app.db.models import (
     ReviewReport,
     User,
 )
-from app.db.session import async_session_factory, get_db_session
+from app.db.session import get_db_session
 from app.modules.auth.router import get_current_user
 from app.modules.review.analyzer import analyze_review
 from app.modules.review.schemas import (
@@ -25,16 +23,12 @@ from app.modules.review.schemas import (
     ReviewFindingPayload,
     ReviewReportPayload,
 )
-from app.modules.runner.executor import execute_dev_job, runner_engines
+from app.modules.runner.executor import runner_engines
 from app.modules.runner.schemas import DevJobPayload
 
 router = APIRouter(prefix="/reviews")
 db_session_dependency = Depends(get_db_session)
 current_user_dependency = Depends(get_current_user)
-
-
-def session_factory_for_request(request: Request):
-    return getattr(request.app.state, "db_session_factory", async_session_factory)
 
 
 def serialize_job(job: DevJob) -> DevJobPayload:
@@ -245,33 +239,6 @@ async def get_review(
     )
 
 
-async def optimization_background(job_id: str, session_factory: Callable):
-    async with session_factory() as session:
-        job = await session.get(DevJob, job_id)
-        if not job:
-            return
-        try:
-            await execute_dev_job(session, job)
-        except Exception as exc:
-            session.add(
-                DevJobEvent(
-                    job_id=job.id,
-                    level="error",
-                    phase="execution.error",
-                    message=f"后台优化任务异常：{exc.__class__.__name__}",
-                    payload={},
-                )
-            )
-            job.status = "failed"
-            job.progress = 100
-            await session.commit()
-
-        await session.refresh(job)
-        spec = await session.get(AgentSpec, job.spec_id) if job.spec_id else None
-        await create_review_record(session, job.user_id, job, spec)
-        await session.commit()
-
-
 @router.post("/{review_id}/regenerate")
 async def regenerate_review(
     review_id: str,
@@ -301,8 +268,6 @@ async def regenerate_review(
 @router.post("/{review_id}/optimize")
 async def optimize_from_review(
     review_id: str,
-    background_tasks: BackgroundTasks,
-    request: Request,
     session: AsyncSession = db_session_dependency,
     current_user: User = current_user_dependency,
 ):
@@ -340,8 +305,8 @@ async def optimize_from_review(
         spec_id=spec_id,
         source_review_id=report.id,
         strategy=strategy,
-        status="running",
-        progress=1,
+        status="queued",
+        progress=0,
     )
     session.add(job)
     await session.flush()
@@ -350,7 +315,7 @@ async def optimize_from_review(
             job_id=job.id,
             level="info",
             phase="optimization.enqueue",
-            message="已根据评审报告创建后台优化任务。",
+            message="已根据评审报告创建优化任务，等待桌面端本机 Runner 执行。",
             payload={"sourceReviewId": report.id},
         )
     )
@@ -364,11 +329,6 @@ async def optimize_from_review(
     )
     await session.commit()
     await session.refresh(job)
-    background_tasks.add_task(
-        optimization_background,
-        job.id,
-        session_factory_for_request(request),
-    )
     return ok(await serialize_report(session, report))
 
 

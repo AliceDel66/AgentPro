@@ -12,7 +12,14 @@ from app.core.responses import ok
 from app.db.models import AgentSpec, DevJob, DevJobArtifact, DevJobEvent, Requirement, User
 from app.db.session import async_session_factory, get_db_session
 from app.modules.auth.router import get_current_user
-from app.modules.runner.executor import execute_dev_job, runner_engines
+from app.modules.runner.executor import (
+    execute_dev_job,
+    load_requirement_for_job,
+    load_source_review_for_job,
+    load_spec_for_job,
+    prompt_for_job,
+    runner_engines,
+)
 from app.modules.runner.schemas import (
     DevJobArtifactCreate,
     DevJobArtifactPayload,
@@ -21,6 +28,7 @@ from app.modules.runner.schemas import (
     DevJobLeaseRequest,
     DevJobLeaseResponse,
     DevJobPayload,
+    DevJobRunnerPackage,
 )
 
 router = APIRouter(prefix="/dev-jobs")
@@ -149,6 +157,34 @@ async def get_dev_job(
     current_user: User = current_user_dependency,
 ):
     return ok(serialize_job(await get_owned_job(job_id, session, current_user)))
+
+
+@router.get("/{job_id}/runner-package")
+async def get_dev_job_runner_package(
+    job_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    """Build the prompt package for a desktop-local runner.
+
+    The API server owns task state and audit data; the desktop app owns actual CLI
+    execution so production deployments do not run Codex/Claude Code on the server.
+    """
+    job = await get_owned_job(job_id, session, current_user)
+    requirement = await load_requirement_for_job(session, job)
+    spec = await load_spec_for_job(session, job)
+    source_review, source_findings = await load_source_review_for_job(session, job)
+    return ok(
+        DevJobRunnerPackage(
+            id=job.id,
+            strategy=job.strategy,
+            engines=engines_for_strategy(job.strategy),
+            prompt=prompt_for_job(job, requirement, spec, source_review, source_findings),
+            requirementId=job.requirement_id,
+            specId=job.spec_id,
+            sourceReviewId=job.source_review_id,
+        )
+    )
 
 
 @router.post("/{job_id}/execute")

@@ -600,3 +600,29 @@
 - Commit：
   - 哈希：d438bc4
   - 信息：完成异步真实开发执行与报告优化闭环
+
+### 22. 桌面端本机 Runner 执行边界修正
+- 状态：已完成
+- 完成功能：
+  - 新增 `GET /api/v1/dev-jobs/{id}/runner-package`，只返回 prompt、strategy、engines、关联 spec/requirement/review 信息，不在服务器执行 CLI
+  - `runner-package` 读取不会改变 DevJob 状态，确保“任务打包”和“本机执行”边界清晰
+  - `POST /api/v1/reviews/{id}/optimize` 改为创建 `queued` 优化任务并记录“等待桌面端本机 Runner 执行”事件，不再在服务器后台执行 Codex/Claude Code
+  - 保留服务器侧 `/execute` 与 `/execute/async` 作为开发/测试后备接口，但前端桌面主流程不再调用它们
+  - 新增回归测试：runner-package 返回任务包且不执行；报告优化只创建待本机执行的 sourceReview DevJob
+- 相关文件：
+  - backend/app/modules/runner/router.py
+  - backend/app/modules/runner/schemas.py
+  - backend/app/modules/review/router.py
+  - backend/tests/test_runner.py
+  - backend/tests/test_review.py
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_runner.py backend/tests/test_review.py（16 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（57 passed）
+  - 已通过 npm run build
+  - 已通过 cargo check（src-tauri）
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：本提交
+  - 信息：接入桌面端本机 Runner 执行

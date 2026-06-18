@@ -22,6 +22,16 @@ class DevJobPayload(BaseModel):
     sourceReviewId: str | None = None
 
 
+class DevJobRunnerPackage(BaseModel):
+    id: str
+    strategy: RunnerStrategy
+    engines: list[str]
+    prompt: str
+    requirementId: str | None = None
+    specId: str | None = None
+    sourceReviewId: str | None = None
+
+
 class DevJobLeaseRequest(BaseModel):
     runnerId: str = Field(min_length=1, max_length=120)
     leaseSeconds: int = Field(default=300, ge=30, le=1800)

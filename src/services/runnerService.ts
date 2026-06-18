@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from "./apiClient";
-import type { RunnerEvent, RunnerJob, RunnerRequest } from "./types";
+import type { RunnerEvent, RunnerJob, RunnerPackage, RunnerRequest } from "./types";
 
 const mockJob: RunnerJob = {
   id: "job_mock_parallel_001",
@@ -20,6 +20,18 @@ export function executeRunnerJobAsync(jobId: string) {
   return apiPost(`/dev-jobs/${jobId}/execute/async`, {}, mockJob);
 }
 
+export function getRunnerPackage(jobId: string) {
+  return apiGet<RunnerPackage>(`/dev-jobs/${jobId}/runner-package`, {
+    id: jobId,
+    strategy: "codex",
+    engines: ["codex"],
+    prompt: "",
+    requirementId: null,
+    specId: null,
+    sourceReviewId: null
+  });
+}
+
 export function getRunnerJob(jobId: string) {
   return apiGet(`/dev-jobs/${jobId}`, mockJob);
 }
@@ -34,7 +46,7 @@ export function leaseRunnerJob(jobId: string, runnerId: string) {
 
 export function appendRunnerEvent(
   jobId: string,
-  event: { phase: string; message: string; level?: string; progress?: number; status?: string }
+  event: { phase: string; message: string; level?: string; progress?: number; status?: string; payload?: Record<string, unknown> }
 ) {
   return apiPost(`/dev-jobs/${jobId}/events`, event, mockJob);
 }

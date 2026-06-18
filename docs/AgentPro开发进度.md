@@ -727,3 +727,38 @@
 - Commit：
   - 哈希：2dd3d9b
   - 信息：收紧工作流并新增报告档案页
+
+### 29. 桌面端连接客户本机 Codex / Claude Code
+- 状态：已完成
+- 完成功能：
+  - 新增 `src/services/localRunnerService.ts`，开发调度不再调用服务器侧执行接口，而是由桌面端读取 runner-package 后调用客户本机 CLI
+  - DispatchPage 点击“开始真实开发”后创建 DevJob、进入 Monitor，再由 Tauri 本机执行器接管任务并持续回传事件/artifact
+  - ReportsPage 点击“优化”后只让后端创建优化 Job，随后同样由桌面端本机执行器运行，并在完成后自动创建新评审报告
+  - Tauri 新增 `execute_agent_runner` 命令：只允许 `codex` / `claude-code`，自动探测 `/opt/homebrew/bin`、`/usr/local/bin` 等常见 CLI 路径，创建隔离工作区，写入 prompt，捕获 stdout/stderr/diff
+  - Codex 调用改为 `codex exec --cd <workdir> --sandbox workspace-write --skip-git-repo-check -`
+  - Claude Code 调用改为 `claude --print --permission-mode acceptEdits --add-dir <workdir> --input-format text --output-format text`
+  - 本机执行不可用时写入 `blocked/failed` 事件，监控页可见，不再只在 console 失败
+- 相关文件：
+  - src-tauri/src/lib.rs
+  - src/services/localRunnerService.ts
+  - src/services/runnerService.ts
+  - src/services/types.ts
+  - src/pages/workspace/DispatchPage.tsx
+  - src/pages/workspace/ReportsPage.tsx
+  - backend/app/modules/runner/router.py
+  - backend/app/modules/runner/schemas.py
+  - backend/app/modules/review/router.py
+  - backend/tests/test_runner.py
+  - backend/tests/test_review.py
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 cargo check（src-tauri）
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_runner.py backend/tests/test_review.py（16 passed）
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（57 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：本提交
+  - 信息：接入桌面端本机 Runner 执行

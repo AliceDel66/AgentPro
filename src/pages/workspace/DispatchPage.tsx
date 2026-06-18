@@ -2,7 +2,8 @@ import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { StatusChip } from "../../components/common/StatusChip";
-import { executeRunnerJobAsync, startRunnerJob } from "../../services/runnerService";
+import { executeRunnerJobOnDesktop } from "../../services/localRunnerService";
+import { startRunnerJob } from "../../services/runnerService";
 import type { RunnerRequest } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -47,12 +48,12 @@ export function DispatchPage({ activeRequirementId, activeSpecId, navigate, setA
       setActiveJobId(result.data.id);
       setActiveJobStatus(result.data.status ?? "queued");
       navigate("monitor");
-      void executeRunnerJobAsync(result.data.id)
-        .then((executeResult) => {
-          setActiveJobStatus(executeResult.data.status);
-        })
+      void executeRunnerJobOnDesktop(result.data.id, {
+        createReviewOnComplete: true,
+        onStatus: setActiveJobStatus
+      })
         .catch((error) => {
-          console.error("[AgentPro] 启动真实 Runner 失败", error);
+          console.error("[AgentPro] 本机真实 Runner 执行失败", error);
           setActiveJobStatus("blocked");
         });
     } catch (error) {

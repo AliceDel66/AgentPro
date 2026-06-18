@@ -1,7 +1,5 @@
 from httpx import AsyncClient
 
-from app.core.config import get_settings
-
 
 async def register_headers(client: AsyncClient, email: str) -> dict[str, str]:
     code_response = await client.post("/api/v1/auth/email-code", json={"email": email})
@@ -218,27 +216,9 @@ async def test_review_regenerate_creates_new_report_from_same_context(
     assert new_report["specId"] == spec_id
 
 
-async def test_review_optimize_creates_source_review_job_and_auto_review(
+async def test_review_optimize_creates_source_review_job_for_desktop_runner(
     api_client: AsyncClient,
-    monkeypatch,
-    tmp_path,
 ) -> None:
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    fake_codex = fake_bin / "codex"
-    fake_codex.write_text(
-        "#!/bin/sh\n"
-        "printf 'fake optimize codex received %s\\n' \"$*\"\n"
-        "printf '\\noptimize runner touched README\\n' >> README.md\n",
-        encoding="utf-8",
-    )
-    fake_codex.chmod(0o755)
-
-    monkeypatch.setenv("PATH", f"{fake_bin}:/usr/bin:/bin")
-    monkeypatch.setenv("AGENTPRO_RUNNER_EXECUTION_ENABLED", "true")
-    monkeypatch.setenv("AGENTPRO_RUNNER_WORKSPACE_ROOT", str(tmp_path / "runs"))
-    get_settings.cache_clear()
-
     headers = await register_headers(api_client, "optimize@example.com")
     spec_id = await create_owned_spec(api_client, headers)
     job_response = await api_client.post(
@@ -265,19 +245,19 @@ async def test_review_optimize_creates_source_review_job_and_auto_review(
     optimized_source = optimize.json()["data"]
     optimization_job = optimized_source["optimizationJob"]
     assert optimization_job["sourceReviewId"] == review_id
-    assert optimization_job["status"] == "running"
+    assert optimization_job["status"] == "queued"
 
     list_response = await api_client.get("/api/v1/reviews", headers=headers)
     reports = list_response.json()["data"]
-    assert len(reports) == 2
-    newest = reports[0]
-    assert newest["id"] != review_id
-    assert newest["jobId"] == optimization_job["id"]
+    assert len(reports) == 1
+    assert reports[0]["id"] == review_id
+    assert reports[0]["optimizationJob"]["id"] == optimization_job["id"]
 
     events_response = await api_client.get(
         f"/api/v1/dev-jobs/{optimization_job['id']}/events",
         headers=headers,
     )
+    assert "等待桌面端本机 Runner 执行" in events_response.text
     assert "sourceReviewId" in events_response.text
 
 
