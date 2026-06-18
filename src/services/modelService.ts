@@ -1,5 +1,5 @@
 import { apiGet, apiPost, apiPut } from "./apiClient";
-import type { ModelProviderConfig } from "./types";
+import type { ModelProviderConfig, ModelTestResult } from "./types";
 
 const mockModelConfig: ModelProviderConfig = {
   provider: "sub2api",
@@ -21,7 +21,7 @@ export function fetchModelList() {
 }
 
 export function testModelConfig(config: Partial<ModelProviderConfig> & { apiKey?: string }) {
-  return apiPost("/model/test", config, {
+  return apiPost<Partial<ModelProviderConfig> & { apiKey?: string }, ModelTestResult>("/model/test", config, {
     connected: true,
     latencyMs: 120,
     message: "mock fallback",

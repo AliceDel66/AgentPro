@@ -13,6 +13,15 @@ AgentPro 是一个面向技术小白的桌面端 Agent 开发助手原型。当�
 
 ## 启动项目
 
+先启动后端 API：
+
+```bash
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+再启动前端：
+
 ```bash
 npm install
 npm run dev
@@ -22,6 +31,12 @@ npm run dev
 
 ```text
 http://127.0.0.1:5173/
+```
+
+前端默认通过 `/api/v1` 请求真实后端，Vite 开发服务器会代理到 `http://127.0.0.1:8000`。如需临时使用前端 mock，可设置：
+
+```bash
+VITE_AGENTPRO_MOCK_API=true npm run dev
 ```
 
 生产构建：
@@ -65,10 +80,10 @@ npm run lint
 
 ## 当前 Mock 边界
 
-- 登录注册流程为前端 mock，未接真实验证码与账号系统。
-- 模型连接测试与模型列表为 mock，服务层已预留接口。
-- Agent 需求访谈、反问确认、AgentSpec 生成、存档与审批为 mock。
-- Codex / Claude Code 调度、并行监控和自动评审结果为 mock。
+- 登录、注册流程已接入真实邮箱验证码、账号系统和 JWT 会话；本地未配置 SMTP 时，后端会返回本地调试验证码。
+- 模型配置页已接入真实配置保存、手动获取模型列表和默认模型保存接口。
+- Agent 需求访谈、反问确认、AgentSpec 生成、存档与审批已接入真实接口；需求对话会优先使用用户保存的 Base URL、API Key 与默认模型调用 OpenAI 兼容 `/chat/completions`，模型返回普通文本时也会保留为真实回复，模型异常时降级到场景化规则追问。
+- Codex / Claude Code 调度、并行监控和自动评审已接入真实任务与评审接口；实际 Runner 执行细节仍需后续接入本地执行器。
 - 云端数据库连接信息不应放在前端，后续应由后端服务读取安全配置。
 
 ## 安全约定

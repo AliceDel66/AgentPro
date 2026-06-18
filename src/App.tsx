@@ -17,6 +17,10 @@ import type { AppRoute } from "./types";
 
 export default function App() {
   const [route, setRoute] = useState<AppRoute>("login");
+  const [activeRequirementId, setActiveRequirementId] = useState<string | null>(null);
+  const [activeSpecId, setActiveSpecId] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
 
   if (route === "register") return <RegisterPage navigate={setRoute} />;
   if (route === "forgot") return <ForgotPasswordPage navigate={setRoute} />;
@@ -25,19 +29,19 @@ export default function App() {
     return (
       <AppShell navigate={setRoute} route={route}>
         {route === "chat" ? (
-          <ChatPage navigate={setRoute} />
+          <ChatPage activeRequirementId={activeRequirementId} navigate={setRoute} setActiveRequirementId={setActiveRequirementId} />
         ) : route === "followup" ? (
-          <FollowupPage navigate={setRoute} />
+          <FollowupPage activeRequirementId={activeRequirementId} navigate={setRoute} />
         ) : route === "spec" ? (
-          <SpecPage navigate={setRoute} />
+          <SpecPage activeRequirementId={activeRequirementId} navigate={setRoute} setActiveSpecId={setActiveSpecId} />
         ) : route === "library" ? (
-          <LibraryPage navigate={setRoute} />
+          <LibraryPage navigate={setRoute} setActiveRequirementId={setActiveRequirementId} />
         ) : route === "dispatch" ? (
-          <DispatchPage navigate={setRoute} />
+          <DispatchPage activeRequirementId={activeRequirementId} activeSpecId={activeSpecId} navigate={setRoute} setActiveJobId={setActiveJobId} />
         ) : route === "monitor" ? (
-          <MonitorPage navigate={setRoute} />
+          <MonitorPage activeJobId={activeJobId} navigate={setRoute} />
         ) : route === "review" ? (
-          <ReviewPage navigate={setRoute} />
+          <ReviewPage activeJobId={activeJobId} activeReviewId={activeReviewId} activeSpecId={activeSpecId} navigate={setRoute} setActiveReviewId={setActiveReviewId} />
         ) : route === "settings" ? (
           <SettingsPage navigate={setRoute} />
         ) : (

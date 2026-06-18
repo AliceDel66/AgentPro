@@ -34,6 +34,13 @@ export interface ModelProviderConfig {
   secretSaved: boolean;
 }
 
+export interface ModelTestResult {
+  connected: boolean;
+  latencyMs: number;
+  message: string;
+  models: string[];
+}
+
 export interface AgentRequirement {
   id: string;
   title: string;
@@ -65,16 +72,26 @@ export interface AgentSpecDraft {
   body: Record<string, unknown>;
 }
 
+export interface RequirementActionResult {
+  id: string;
+  status: string;
+  spec?: AgentSpecDraft | null;
+}
+
 export interface RunnerRequest {
-  specId: string;
+  specId?: string;
+  requirementId?: string;
   strategy: "codex" | "claude-code" | "parallel";
 }
 
 export interface RunnerJob {
   id: string;
-  status: "queued" | "running" | "completed" | "failed";
+  status: string;
   progress: number;
   engines: string[];
+  strategy?: "codex" | "claude-code" | "parallel";
+  requirementId?: string | null;
+  specId?: string | null;
 }
 
 export interface ReviewReport {

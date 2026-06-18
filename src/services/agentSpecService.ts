@@ -1,6 +1,6 @@
 import { requirementLibraryRows } from "../lib/mockData";
 import { apiGet, apiPost } from "./apiClient";
-import type { AgentRequirement, AgentSpecDraft, RequirementDetail } from "./types";
+import type { AgentRequirement, AgentSpecDraft, RequirementActionResult, RequirementDetail } from "./types";
 
 const mockRequirements: AgentRequirement[] = requirementLibraryRows.map((row, index) => ({
   id: `req_mock_${index + 1}`,
@@ -12,6 +12,21 @@ const mockRequirements: AgentRequirement[] = requirementLibraryRows.map((row, in
 
 export function listRequirements() {
   return apiGet("/requirements", mockRequirements);
+}
+
+export function getRequirementDetail(requirementId: string) {
+  return apiGet<RequirementDetail>(`/requirements/${requirementId}`, {
+    id: requirementId,
+    title: "需求访谈",
+    status: "interviewing",
+    maturity: 45,
+    route: "chat",
+    summary: "",
+    messages: [],
+    followupQuestions: [],
+    decisions: [],
+    safetyReview: {}
+  });
 }
 
 export function saveRequirementDraft(payload: Record<string, unknown>) {
@@ -83,9 +98,17 @@ export function getAgentSpec(requirementId: string) {
 }
 
 export function approveAgentSpec(requirementId: string) {
-  return apiPost(`/requirements/${requirementId}/approve`, {}, { approved: true });
+  return apiPost<object, RequirementActionResult>(`/requirements/${requirementId}/approve`, {}, {
+    id: requirementId,
+    status: "approved",
+    spec: null
+  });
 }
 
 export function archiveRequirement(requirementId: string) {
-  return apiPost(`/requirements/${requirementId}/archive`, {}, { archived: true });
+  return apiPost<object, RequirementActionResult>(`/requirements/${requirementId}/archive`, {}, {
+    id: requirementId,
+    status: "archived",
+    spec: null
+  });
 }

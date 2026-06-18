@@ -1,3 +1,7 @@
+import json
+from importlib import import_module
+
+import pytest
 from httpx import AsyncClient
 
 
@@ -36,6 +40,15 @@ async def test_requirement_interview_flow(api_client: AsyncClient) -> None:
     assert created["maturity"] > 0
     assert created["followupQuestions"]
     assert created["graphRunId"]
+
+    detail_response = await api_client.get(
+        f"/api/v1/requirements/{requirement_id}",
+        headers=headers,
+    )
+    assert detail_response.status_code == 200
+    detail = detail_response.json()["data"]
+    assert detail["followupQuestions"]
+    assert detail["safetyReview"]["riskLevel"] in {"low", "medium"}
 
     message_response = await api_client.post(
         f"/api/v1/requirements/{requirement_id}/messages",
@@ -96,3 +109,169 @@ async def test_requirement_interview_flow(api_client: AsyncClient) -> None:
     )
     assert archive_response.status_code == 200
     assert archive_response.json()["data"]["status"] == "archived"
+
+
+async def test_requirement_chat_uses_saved_ai_model_config(
+    api_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = await auth_headers(api_client)
+    await api_client.put(
+        "/api/v1/model/config",
+        headers=headers,
+        json={
+            "provider": "sub2api",
+            "baseUrl": "https://ai.example.com/v1",
+            "model": "gpt-test-requirements",
+            "apiKey": "requirement-secret",
+        },
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_chat_completion(
+        base_url: str,
+        api_key: str | None,
+        model: str,
+        messages: list[dict[str, str]],
+    ) -> str:
+        captured["base_url"] = base_url
+        captured["api_key"] = api_key
+        captured["model"] = model
+        captured["messages"] = messages
+        return json.dumps(
+            {
+                "assistantMessage": "AI 已接入：我会先确认目标用户和外部工具权限。",
+                "summary": "用户希望创建一个能处理工单分派的 Agent。",
+                "gaps": ["target_users", "tools"],
+                "followupQuestions": [
+                    {
+                        "key": "target_users",
+                        "question": "这个 Agent 主要服务哪些用户角色？",
+                        "reason": "确认使用场景",
+                    }
+                ],
+                "decisions": [
+                    {"key": "scope", "value": "处理工单分派", "confirmed": False}
+                ],
+                "specDraft": {
+                    "name": "工单分派 Agent",
+                    "objective": "提升工单流转效率",
+                    "capabilities": ["理解工单", "推荐分派"],
+                    "openQuestions": [],
+                    "decisions": [],
+                },
+                "safetyReview": {"riskLevel": "low", "risks": []},
+            },
+            ensure_ascii=False,
+        )
+
+    ai_module = import_module("app.modules.requirements.ai_service")
+    monkeypatch.setattr(ai_module, "call_openai_chat_completion", fake_chat_completion)
+
+    create_response = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={
+            "title": "工单分派 Agent",
+            "initialMessage": "我想让 Agent 帮客服主管分派售后工单。",
+        },
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()["data"]
+    assert captured["base_url"] == "https://ai.example.com/v1"
+    assert captured["api_key"] == "requirement-secret"
+    assert captured["model"] == "gpt-test-requirements"
+    assert "chat/completions" not in str(captured["base_url"])
+    assert created["summary"] == "用户希望创建一个能处理工单分派的 Agent。"
+    assert created["followupQuestions"][0]["key"] == "target_users"
+    assert created["messages"][-1]["content"] == "AI 已接入：我会先确认目标用户和外部工具权限。"
+
+
+async def test_requirement_chat_falls_back_when_ai_fails(
+    api_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = await auth_headers(api_client)
+    await api_client.put(
+        "/api/v1/model/config",
+        headers=headers,
+        json={
+            "provider": "sub2api",
+            "baseUrl": "https://broken.example.com/v1",
+            "model": "broken-model",
+            "apiKey": "broken-secret",
+        },
+    )
+
+    async def failing_chat_completion(
+        base_url: str,
+        api_key: str | None,
+        model: str,
+        messages: list[dict[str, str]],
+    ) -> str:
+        raise RuntimeError("service unavailable")
+
+    ai_module = import_module("app.modules.requirements.ai_service")
+    monkeypatch.setattr(ai_module, "call_openai_chat_completion", failing_chat_completion)
+
+    create_response = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={
+            "title": "售后客服 Agent",
+            "initialMessage": "我想做一个自动客服 Agent。",
+        },
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()["data"]
+    assert created["followupQuestions"]
+    assert "售后" in created["messages"][-1]["content"]
+    assert "订单" in created["messages"][-1]["content"]
+
+
+async def test_requirement_chat_keeps_plain_text_ai_response(
+    api_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = await auth_headers(api_client)
+    await api_client.put(
+        "/api/v1/model/config",
+        headers=headers,
+        json={
+            "provider": "sub2api",
+            "baseUrl": "https://plain-text.example.com/v1",
+            "model": "plain-text-model",
+            "apiKey": "plain-text-secret",
+        },
+    )
+
+    async def plain_text_chat_completion(
+        base_url: str,
+        api_key: str | None,
+        model: str,
+        messages: list[dict[str, str]],
+    ) -> str:
+        return (
+            "这个人事简历筛选 Agent 的关键不是泛泛地问权限，"
+            "而是先确认岗位 JD、简历来源、评分维度和 HR 复核边界。"
+        )
+
+    ai_module = import_module("app.modules.requirements.ai_service")
+    monkeypatch.setattr(ai_module, "call_openai_chat_completion", plain_text_chat_completion)
+
+    create_response = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={
+            "title": "人事简历筛选 Agent",
+            "initialMessage": "我想制作一个人事agent，帮我进行简历筛选等任务",
+        },
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()["data"]
+    assert created["messages"][-1]["content"].startswith("这个人事简历筛选 Agent")
+    assert any("简历" in item["question"] for item in created["followupQuestions"])

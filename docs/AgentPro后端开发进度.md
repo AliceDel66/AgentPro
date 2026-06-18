@@ -10,6 +10,7 @@
 - Commit message 使用中文
 - 每个板块完成后更新本文档
 - 每个板块必须同步前端服务层并运行必要检查
+- 每次代码、配置、接口或页面行为变更，都必须同步更新 docs 目录中对应的 Markdown 文档
 - 不提交 `.env`、数据库密码、SMTP 密码、API Key、服务器密码、真实用户隐私数据
 
 ## 进度记录
@@ -265,3 +266,92 @@
 - Commit：
   - 哈希：2966e0c
   - 信息：完成 Docker 部署配置与服务器上线文档
+
+### 11. 前后端真实接口联调与模型列表回归
+- 状态：已完成
+- 完成功能：
+  - 前端登录页、注册页、模型配置页与工作台主流程改为调用真实后端接口
+  - 前端 API client 默认请求 `/api/v1`，本地由 Vite 代理到 `127.0.0.1:8000`
+  - 保留 `VITE_AGENTPRO_MOCK_API=true` 作为显式 mock 开关，不再默认静默 mock
+  - 本地 CORS 默认白名单补充 `http://127.0.0.1:5174` 与 `http://localhost:5174`，适配 Vite 端口占用自动换端口
+  - 新增模型配置回归测试，确认 `/model/test` 使用请求体中的 Base URL 与 API Key 获取模型列表，而不是误用已保存旧配置
+  - README、前端进度文档、后端进度文档和部署说明已同步更新
+- 相关文件：
+  - backend/app/core/config.py
+  - backend/.env.example
+  - backend/tests/test_model_config.py
+  - src/services/apiClient.ts
+  - src/services/modelService.ts
+  - src/pages/setup/SetupPage.tsx
+  - vite.config.ts
+  - README.md
+  - docs/AgentPro开发进度.md
+  - docs/AgentPro后端开发进度.md
+  - docs/AgentPro后端部署.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_auth.py backend/tests/test_model_config.py backend/tests/test_requirements.py backend/tests/test_runner.py backend/tests/test_review.py
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 git diff --check
+  - 模型回归测试断言：传入 `https://input.example.com/v1` 与 `input-key` 时，后端 fetch 层收到的就是这组输入值，并返回 fresh 模型列表
+- Commit：
+  - 哈希：待提交
+  - 信息：补齐真实接口联调与模型列表回归
+
+### 12. 手动获取模型列表与旧模型兜底收紧
+- 状态：已完成
+- 完成功能：
+  - 前端模型配置页改为手动点击“获取模型”后调用 `/model/test`
+  - Base URL、API Key 或服务商变更后清空默认模型和模型列表
+  - 后端 `/model/test` 在显式传入 Base URL 或 API Key 且未传默认模型时，不再用已保存默认模型作为空列表兜底
+  - 新增回归测试：模型服务返回空列表时，响应 `models` 为空数组，避免前端继续展示旧模型
+  - README、前端进度文档、后端进度文档和部署说明已同步更新
+- 相关文件：
+  - backend/app/modules/models/router.py
+  - backend/tests/test_model_config.py
+  - src/pages/setup/SetupPage.tsx
+  - README.md
+  - docs/AgentPro开发进度.md
+  - docs/AgentPro后端开发进度.md
+  - docs/AgentPro后端部署.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_model_config.py
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+- Commit：
+  - 哈希：待提交
+  - 信息：收紧模型列表空结果兜底逻辑
+
+### 13. 配置模型驱动的需求对话
+- 状态：已完成
+- 完成功能：
+  - 新增需求 AI 服务，读取当前用户最新模型配置并解密 API Key
+  - 使用保存的 Base URL、API Key 和默认模型调用 OpenAI 兼容 `${baseUrl}/chat/completions`
+  - 将模型返回的 assistantMessage、summary、gaps、followupQuestions、decisions、specDraft 和 safetyReview 归一化为 RequirementGraphState
+  - AI 如果返回普通文本而不是 JSON，也会保留为真实助手回复，同时用场景化规则补齐结构状态
+  - 需求创建、消息追加和反问确认均优先使用 AI 处理，并将结果写入 agent_graph_runs.state_snapshot
+  - 需求详情接口会回读最新 GraphRun 快照，确保刷新后仍返回追问、安全评审和决策状态
+  - AI 未配置、请求失败或返回空内容时降级到场景化 RequirementGraph，确保接口稳定返回
+  - 本地 RequirementGraph 已支持人事简历筛选、电商售后客服、研发交付等场景化追问，不再输出固定通用模板
+  - GraphRun 的 graph_name 会区分 `AIRequirementGraph` 与 `RequirementGraph`，便于后续排查
+  - README、前端进度文档、后端进度文档和部署说明已同步更新
+- 相关文件：
+  - backend/app/modules/requirements/ai_service.py
+  - backend/app/modules/requirements/graph.py
+  - backend/app/modules/requirements/router.py
+  - backend/tests/test_requirements.py
+  - README.md
+  - docs/AgentPro开发进度.md
+  - docs/AgentPro后端开发进度.md
+  - docs/AgentPro后端部署.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 git diff --check
+- Commit：
+  - 哈希：待提交
+  - 信息：接入配置模型驱动的需求对话

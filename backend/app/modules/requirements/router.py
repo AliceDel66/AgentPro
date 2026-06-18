@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,6 +16,7 @@ from app.db.models import (
 )
 from app.db.session import get_db_session
 from app.modules.auth.router import get_current_user
+from app.modules.requirements.ai_service import run_ai_requirement_graph
 from app.modules.requirements.graph import RequirementGraphState, run_requirement_graph
 from app.modules.requirements.schemas import (
     AgentSpecPayload,
@@ -30,6 +32,7 @@ from app.modules.requirements.schemas import (
 router = APIRouter(prefix="/requirements")
 db_session_dependency = Depends(get_db_session)
 current_user_dependency = Depends(get_current_user)
+logger = logging.getLogger(__name__)
 
 
 def serialize_message(message: ConversationMessage) -> ConversationMessagePayload:
@@ -79,6 +82,7 @@ async def persist_graph_run(
     session: AsyncSession,
     requirement: Requirement,
     graph_state: RequirementGraphState,
+    graph_name: str = "RequirementGraph",
 ) -> AgentGraphRun:
     maturity = min(95, max(10, 100 - len(graph_state.get("gaps", [])) * 12))
     requirement.summary = graph_state.get("summary")
@@ -87,7 +91,7 @@ async def persist_graph_run(
 
     graph_run = AgentGraphRun(
         requirement_id=requirement.id,
-        graph_name="RequirementGraph",
+        graph_name=graph_name,
         status="waiting_user_confirmation",
         current_node="approval_wait",
         state_snapshot=dict(graph_state),
@@ -98,6 +102,10 @@ async def persist_graph_run(
 
 
 def assistant_followup_text(graph_state: RequirementGraphState) -> str:
+    assistant_message = graph_state.get("assistantMessage")
+    if isinstance(assistant_message, str) and assistant_message.strip():
+        return assistant_message.strip()
+
     questions = graph_state.get("followupQuestions", [])
     if not questions:
         return "需求关键信息已经比较完整，可以生成 AgentSpec 草案。"
@@ -133,6 +141,39 @@ async def latest_graph_state(
     messages = await load_messages(session, requirement.id)
     return run_requirement_graph(
         [{"role": message.role, "content": message.content} for message in messages]
+    )
+
+
+async def process_requirement_graph(
+    session: AsyncSession,
+    requirement: Requirement,
+    user: User,
+    confirmed_decisions: list[dict[str, Any]] | None = None,
+) -> tuple[RequirementGraphState, str]:
+    messages = [
+        {"role": message.role, "content": message.content}
+        for message in await load_messages(session, requirement.id)
+    ]
+    decisions = confirmed_decisions or []
+    try:
+        ai_state = await run_ai_requirement_graph(
+            session,
+            user.id,
+            requirement.title,
+            messages,
+            confirmed_decisions=decisions,
+        )
+        if ai_state:
+            return ai_state, "AIRequirementGraph"
+    except Exception as exc:
+        logger.warning(
+            "Requirement AI graph failed, falling back to rules: %s",
+            exc.__class__.__name__,
+        )
+
+    return (
+        run_requirement_graph(messages, confirmed_decisions=decisions),
+        "RequirementGraph",
     )
 
 
@@ -220,19 +261,16 @@ async def create_requirement(
         )
         await session.flush()
 
-    messages = await load_messages(session, requirement.id)
-    graph_state = run_requirement_graph(
-        [{"role": message.role, "content": message.content} for message in messages]
-    )
+    graph_state, graph_name = await process_requirement_graph(session, requirement, current_user)
     session.add(
         ConversationMessage(
             requirement_id=requirement.id,
             role="assistant",
             content=assistant_followup_text(graph_state),
-            message_metadata={"graph": "RequirementGraph"},
+            message_metadata={"graph": graph_name},
         )
     )
-    graph_run = await persist_graph_run(session, requirement, graph_state)
+    graph_run = await persist_graph_run(session, requirement, graph_state, graph_name)
     await session.commit()
     return ok(await build_detail(session, requirement, graph_state, graph_run.id))
 
@@ -268,7 +306,8 @@ async def get_requirement(
     current_user: User = current_user_dependency,
 ):
     requirement = await get_owned_requirement(requirement_id, session, current_user)
-    return ok(await build_detail(session, requirement))
+    graph_state = await latest_graph_state(session, requirement)
+    return ok(await build_detail(session, requirement, graph_state))
 
 
 @router.post("/{requirement_id}/messages")
@@ -283,19 +322,16 @@ async def add_requirement_message(
         ConversationMessage(requirement_id=requirement.id, role="user", content=body.content)
     )
     await session.flush()
-    messages = await load_messages(session, requirement.id)
-    graph_state = run_requirement_graph(
-        [{"role": message.role, "content": message.content} for message in messages]
-    )
+    graph_state, graph_name = await process_requirement_graph(session, requirement, current_user)
     session.add(
         ConversationMessage(
             requirement_id=requirement.id,
             role="assistant",
             content=assistant_followup_text(graph_state),
-            message_metadata={"graph": "RequirementGraph"},
+            message_metadata={"graph": graph_name},
         )
     )
-    graph_run = await persist_graph_run(session, requirement, graph_state)
+    graph_run = await persist_graph_run(session, requirement, graph_state, graph_name)
     await session.commit()
     return ok(await build_detail(session, requirement, graph_state, graph_run.id))
 
@@ -330,13 +366,22 @@ async def confirm_followups(
             )
 
     await session.flush()
-    messages = await load_messages(session, requirement.id)
     confirmed_decisions = await load_decisions(session, requirement.id)
-    graph_state = run_requirement_graph(
-        [{"role": message.role, "content": message.content} for message in messages],
+    graph_state, graph_name = await process_requirement_graph(
+        session,
+        requirement,
+        current_user,
         confirmed_decisions=confirmed_decisions,
     )
-    graph_run = await persist_graph_run(session, requirement, graph_state)
+    session.add(
+        ConversationMessage(
+            requirement_id=requirement.id,
+            role="assistant",
+            content=assistant_followup_text(graph_state),
+            message_metadata={"graph": graph_name},
+        )
+    )
+    graph_run = await persist_graph_run(session, requirement, graph_state, graph_name)
     await session.commit()
     return ok(await build_detail(session, requirement, graph_state, graph_run.id))
 

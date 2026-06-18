@@ -114,6 +114,8 @@ async def test_model_config(
     base_url = str(body.baseUrl).rstrip("/") if body.baseUrl else stored.base_url if stored else ""
     api_key = body.apiKey or decrypt_secret(stored.api_key_ciphertext if stored else None)
     model = body.model or (stored.default_model if stored else DEFAULT_MODEL_CONFIG.model)
+    explicit_connection_input = body.baseUrl is not None or body.apiKey is not None
+    fallback_models = [] if explicit_connection_input and not body.model else [model]
 
     started = perf_counter()
     try:
@@ -124,7 +126,7 @@ async def test_model_config(
                 connected=True,
                 latencyMs=latency_ms,
                 message="模型服务连接正常",
-                models=models or [model],
+                models=models or fallback_models,
             )
         )
     except Exception as exc:
@@ -134,7 +136,7 @@ async def test_model_config(
                 connected=False,
                 latencyMs=latency_ms,
                 message=f"模型服务连接失败：{exc.__class__.__name__}",
-                models=[model],
+                models=fallback_models,
             )
         )
 

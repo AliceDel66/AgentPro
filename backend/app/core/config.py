@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     cors_origins_raw: str = Field(
-        default="http://127.0.0.1:5173,http://localhost:5173,tauri://localhost",
+        default=(
+            "http://127.0.0.1:5173,http://localhost:5173,"
+            "http://127.0.0.1:5174,http://localhost:5174,tauri://localhost"
+        ),
         alias="AGENTPRO_CORS_ORIGINS",
     )
     docs_enabled: bool = True

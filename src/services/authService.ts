@@ -21,7 +21,11 @@ export function loginWithPassword(identifier: string, password: string) {
 }
 
 export function requestEmailCode(email: string) {
-  return apiPost<object, EmailCodeResult>("/auth/email-code", { email }, { sent: true, cooldownSeconds: 60 });
+  return apiPost<{ email: string; purpose: "register" }, EmailCodeResult>(
+    "/auth/email-code",
+    { email, purpose: "register" },
+    { sent: true, cooldownSeconds: 60 }
+  );
 }
 
 export function registerWithEmail(email: string, code: string, password: string, name: string) {
