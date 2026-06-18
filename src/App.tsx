@@ -15,6 +15,7 @@ import { SettingsPage } from "./pages/workspace/SettingsPage";
 import { SpecPage } from "./pages/workspace/SpecPage";
 import { ShellPlaceholder } from "./pages/workspace/ShellPlaceholder";
 import { useAuthStore } from "./stores/authStore";
+import { useWorkflowStore } from "./stores/workflowStore";
 import type { AppRoute } from "./types";
 
 const AUTH_ROUTES: AppRoute[] = ["login", "register", "forgot"];
@@ -22,10 +23,15 @@ const AUTH_ROUTES: AppRoute[] = ["login", "register", "forgot"];
 export default function App() {
   const [route, setRoute] = useState<AppRoute>("login");
   const [booted, setBooted] = useState(false);
-  const [activeRequirementId, setActiveRequirementId] = useState<string | null>(null);
-  const [activeSpecId, setActiveSpecId] = useState<string | null>(null);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
+  // Workflow context is persisted in the store so a refresh keeps the active project.
+  const activeRequirementId = useWorkflowStore((state) => state.activeRequirementId);
+  const activeSpecId = useWorkflowStore((state) => state.activeSpecId);
+  const activeJobId = useWorkflowStore((state) => state.activeJobId);
+  const activeReviewId = useWorkflowStore((state) => state.activeReviewId);
+  const setActiveRequirementId = useWorkflowStore((state) => state.setActiveRequirementId);
+  const setActiveSpecId = useWorkflowStore((state) => state.setActiveSpecId);
+  const setActiveJobId = useWorkflowStore((state) => state.setActiveJobId);
+  const setActiveReviewId = useWorkflowStore((state) => state.setActiveReviewId);
 
   const status = useAuthStore((state) => state.status);
   const bootstrap = useAuthStore((state) => state.bootstrap);
