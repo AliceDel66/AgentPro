@@ -630,3 +630,26 @@
 - Commit：
   - 哈希：待提交
   - 信息：修复 AgentSpec 与评审报告重复生成问题
+
+### 25. 登录态闭环与工作流地基（R6 + 工作流方案阶段 1/2/6 起步）
+- 状态：已完成
+- 完成功能：
+  - R6：App 启动 bootstrap 恢复登录态（加载态过渡），未登录访问 workspace 路由统一回退登录页，token 失效干净登出，登录/注册即写入 authStore
+  - 新增 `workflowStore`（持久化 activeRequirementId/specId/jobId/reviewId，切换需求清空下游 id），App.tsx 改为从 store 读取上下文，刷新保留当前项目
+  - 新增 `src/lib/workflow.ts` 阶段与下一步映射；新增 `WorkflowStepper` 顶部阶段条（需求访谈→需求草案→开发调度→并行监控→自动评审），按当前路由高亮
+  - 需求库新增“下一步”列：按需求状态给出唯一主动作并跳转对应页面，点击行名恢复项目上下文
+- 相关文件：
+  - src/App.tsx
+  - src/stores/authStore.ts
+  - src/stores/workflowStore.ts
+  - src/services/authService.ts
+  - src/lib/workflow.ts
+  - src/components/layout/WorkflowStepper.tsx
+  - src/components/layout/AppShell.tsx
+  - src/pages/workspace/LibraryPage.tsx
+- 验证结果：
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：新增工作流阶段条与需求库下一步

@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { BarChart3, Bell, BotMessageSquare, FileText, FolderOpen, Monitor, Play, Settings } from "lucide-react";
 import { getUserAvatarInitial, getUserDisplayName, useAuthStore } from "../../stores/authStore";
+import { WorkflowStepper } from "./WorkflowStepper";
 import type { AppRoute, Navigate } from "../../types";
 
 interface AppShellProps {
@@ -99,9 +100,12 @@ export function AppShell({ route, navigate, children }: AppShellProps) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[50px] shrink-0 items-center justify-between border-b border-agent-divider bg-white px-7">
-          <span className="text-[15px] font-semibold text-agent-ink">{title}</span>
-          <div className="flex items-center gap-[18px]">
+        <header className="flex h-[50px] shrink-0 items-center justify-between gap-4 border-b border-agent-divider bg-white px-7">
+          <span className="shrink-0 text-[15px] font-semibold text-agent-ink">{title}</span>
+          <div className="hidden min-w-0 flex-1 justify-center lg:flex">
+            <WorkflowStepper route={route} navigate={navigate} />
+          </div>
+          <div className="flex shrink-0 items-center gap-[18px]">
             <button className="relative text-agent-subtle hover:text-agent-primary" title="通知" type="button">
               <Bell size={18} />
               <span className="absolute -right-0.5 -top-0.5 h-[7px] w-[7px] rounded-full border-[1.5px] border-white bg-agent-danger" />

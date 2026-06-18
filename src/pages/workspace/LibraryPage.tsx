@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
 import { listRequirements } from "../../services/agentSpecService";
+import { nextActionForStatus } from "../../lib/workflow";
 import type { AgentRequirement } from "../../services/types";
 import type { AppRoute, Navigate } from "../../types";
 
@@ -11,7 +12,7 @@ interface LibraryPageProps {
   setActiveRequirementId: (requirementId: string | null) => void;
 }
 
-const columns = "grid-cols-[2.2fr_100px_100px_80px_120px_80px]";
+const columns = "grid-cols-[2fr_92px_92px_72px_104px_64px_108px]";
 
 function statusMeta(status: string): { label: string; tone: "blue" | "gray" | "cyan" | "purple" | "green"; route: AppRoute } {
   const meta: Record<string, { label: string; tone: "blue" | "gray" | "cyan" | "purple" | "green"; route: AppRoute }> = {
@@ -89,7 +90,7 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
 
       <div className="overflow-hidden rounded-xl border border-agent-border bg-white">
         <div className={`grid ${columns} border-b border-agent-divider bg-[#F8FAFC] px-6 py-[13px]`}>
-          {["需求名称", "状态", "最近更新", "成熟度", "开发方式", "评审分"].map((column) => (
+          {["需求名称", "状态", "最近更新", "成熟度", "开发方式", "评审分", "下一步"].map((column) => (
             <span className="text-xs font-semibold text-agent-muted" key={column}>
               {column}
             </span>
@@ -99,17 +100,19 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
         {!loading && !requirements.length ? <div className="px-6 py-8 text-sm text-agent-muted">暂无需求，点击“新建需求”开始。</div> : null}
         {requirements.map((row, index) => {
           const meta = statusMeta(row.status);
+          const next = nextActionForStatus(row.status);
+          const openRow = () => {
+            setActiveRequirementId(row.id);
+            navigate(row.route ?? meta.route);
+          };
           return (
-            <button
-              className={`grid w-full ${columns} items-center px-6 py-4 text-left hover:bg-[#FAFCFE] ${index === requirements.length - 1 ? "" : "border-b border-agent-divider"}`}
+            <div
+              className={`grid ${columns} items-center px-6 py-4 hover:bg-[#FAFCFE] ${index === requirements.length - 1 ? "" : "border-b border-agent-divider"}`}
               key={row.id}
-              type="button"
-              onClick={() => {
-                setActiveRequirementId(row.id);
-                navigate(row.route ?? meta.route);
-              }}
             >
-              <span className="truncate text-[13px] font-medium text-agent-ink">{row.title}</span>
+              <button className="truncate text-left text-[13px] font-medium text-agent-ink hover:text-agent-primary" type="button" onClick={openRow}>
+                {row.title}
+              </button>
               <span>
                 <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
               </span>
@@ -117,7 +120,19 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
               <span className="text-[13px] font-semibold text-agent-primary">{row.maturity}%</span>
               <span className="text-xs text-agent-muted">{row.status === "approved" ? "待选择" : "-"}</span>
               <span className="text-[13px] font-medium text-agent-subtle">-</span>
-            </button>
+              <span>
+                <button
+                  className="rounded-lg bg-agent-pale px-3 py-1.5 text-xs font-semibold text-agent-primary hover:bg-agent-paleHover"
+                  type="button"
+                  onClick={() => {
+                    setActiveRequirementId(row.id);
+                    navigate(next.route);
+                  }}
+                >
+                  {next.label}
+                </button>
+              </span>
+            </div>
           );
         })}
       </div>
