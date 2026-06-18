@@ -3,8 +3,9 @@ import { CheckCircle2, Lock, Shield, TriangleAlert } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
+import { getCurrentUser } from "../../services/authService";
 import { getModelConfig } from "../../services/modelService";
-import type { ModelProviderConfig } from "../../services/types";
+import type { AuthUser, ModelProviderConfig } from "../../services/types";
 import type { Navigate } from "../../types";
 
 interface SettingsPageProps {
@@ -12,9 +13,33 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ navigate }: SettingsPageProps) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [userError, setUserError] = useState<string | null>(null);
   const [modelConfig, setModelConfig] = useState<ModelProviderConfig | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [loadingModel, setLoadingModel] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUser() {
+      setLoadingUser(true);
+      try {
+        const result = await getCurrentUser();
+        if (!cancelled) setUser(result.data);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "读取账号信息失败";
+        if (!cancelled) setUserError(message);
+      } finally {
+        if (!cancelled) setLoadingUser(false);
+      }
+    }
+
+    void loadUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,20 +68,32 @@ export function SettingsPage({ navigate }: SettingsPageProps) {
         <h1 className="m-0 mb-8 text-[22px] font-bold text-agent-ink">设置</h1>
 
         <Card title="账号信息">
-          <div className="mb-5 flex items-center gap-4">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-agent-primary text-lg font-semibold text-white">张</div>
-            <div>
-              <div className="text-[15px] font-semibold text-agent-ink">张明</div>
-              <div className="text-[13px] text-agent-muted">zhang@example.com</div>
-            </div>
-            <StatusChip className="ml-auto" tone="green">
-              已验证
-            </StatusChip>
-          </div>
-          <div className="flex items-center gap-3 rounded-[10px] bg-[#F8FAFC] px-[18px] py-3.5">
-            <CheckCircle2 size={16} className="text-agent-success" />
-            <span className="text-[13px] text-agent-secondary">云端同步已开启 · 最后同步 3 分钟前</span>
-          </div>
+          {loadingUser ? (
+            <LoadingState label="正在读取账号信息..." />
+          ) : (
+            <>
+              <div className="mb-5 flex items-center gap-4">
+                <div className="grid h-12 w-12 place-items-center rounded-full bg-agent-primary text-lg font-semibold text-white">
+                  {(user?.name?.[0] ?? "U").toUpperCase()}
+                </div>
+                <div>
+                  <div className="text-[15px] font-semibold text-agent-ink">{user?.name ?? "未登录"}</div>
+                  <div className="text-[13px] text-agent-muted">{user?.email ?? "-"}</div>
+                </div>
+                <StatusChip className="ml-auto" tone={user?.emailVerified ? "green" : "gray"}>
+                  {user?.emailVerified ? "已验证" : "未验证"}
+                </StatusChip>
+              </div>
+              {userError ? (
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{userError}</div>
+              ) : (
+                <div className="flex items-center gap-3 rounded-[10px] bg-[#F8FAFC] px-[18px] py-3.5">
+                  <CheckCircle2 size={16} className="text-agent-success" />
+                  <span className="text-[13px] text-agent-secondary">账号数据已与后端同步</span>
+                </div>
+              )}
+            </>
+          )}
         </Card>
 
         <Card title="模型配置">

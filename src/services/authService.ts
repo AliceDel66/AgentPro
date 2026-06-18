@@ -1,4 +1,4 @@
-import { apiPost } from "./apiClient";
+import { apiGet, apiPost } from "./apiClient";
 import type { AuthSession, AuthUser, EmailCodeResult } from "./types";
 
 const mockUser: AuthUser = {
@@ -18,6 +18,10 @@ const mockSession: AuthSession = {
 
 export function loginWithPassword(identifier: string, password: string) {
   return apiPost("/auth/login", { identifier, password }, mockSession);
+}
+
+export function getCurrentUser() {
+  return apiGet<AuthUser>("/auth/me", mockUser);
 }
 
 export function requestEmailCode(email: string, purpose: "register" | "reset" = "register") {

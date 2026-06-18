@@ -129,7 +129,7 @@ if spec:
 | L1 | `backend/app/modules/runner/router.py:192`（`/stream`）| SSE 用 Authorization 头鉴权，浏览器 `EventSource` 无法带自定义头，前端实际无法消费 | 改为 query token 一次性票据，或用 fetch + ReadableStream |
 | L2 | `src/services/apiClient.ts` | access token 30 分钟过期后无自动刷新，`refreshSession` 未接入 | 在 `parseApiResponse` 401 时用 refresh token 自动续签并重放 |
 | L3 | `src/pages/auth/ForgotPasswordPage.tsx` | 页面未接任何 API，后端也无重置密码端点 | ✅ 已修复（见 §三.5） |
-| L4 | `src/pages/workspace/SettingsPage.tsx:42-53` | 账号区为硬编码假数据（"张明…最后同步 3 分钟前"） | 接入 `/auth/me` 真实用户 |
+| L4 | `src/pages/workspace/SettingsPage.tsx` | 账号区为硬编码假数据（"张明…最后同步 3 分钟前"） | ✅ 已修复（见 §三.5） |
 | L5 | `.gitignore` | 未忽略 `backend/*.db`，`agentpro_local.db` 处于未跟踪状态 | `.gitignore` 增加 `backend/*.db` |
 | L6 | `VITE_AGENTPRO_MOCK_API` | mock fallback 返回假用户/假会话，误开会掩盖真实错误 | 生产构建禁用并加显著告警 |
 | L7 | `app/db/models.py:324`（`AuditLog`） | 审计表已建模但未见写入 | 在高风险动作处落审计日志 |
@@ -197,6 +197,9 @@ if spec:
   - 后端新增 `POST /auth/password-reset/confirm`：校验 `purpose="reset"` 验证码、更新密码哈希，并**吊销该用户全部有效刷新令牌**；发码复用 `/auth/email-code`。
   - 前端 `ForgotPasswordPage` 从静态占位改为可用表单：邮箱 + 发送验证码（冷却 + spinner）、验证码、新密码/确认、前端校验、本地调试码自动填入，成功后跳登录。
   - 新增 `tests/test_auth.py` 两项（重置成功改密 + 无效验证码 400），全套 **38/38 通过**。
+
+- **L4｜设置页真实账号信息**（`src/pages/workspace/SettingsPage.tsx`、`src/services/authService.ts`）
+  - 新增 `getCurrentUser`（`GET /auth/me`）；设置页改为展示真实用户名/邮箱/验证状态，含 loading 与错误态，移除「张明 / 最后同步 3 分钟前」等硬编码假数据。
 
 ---
 
