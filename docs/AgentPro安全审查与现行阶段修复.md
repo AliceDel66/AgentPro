@@ -53,7 +53,7 @@ def get_settings() -> Settings:
     return settings
 ```
 
-#### H2. 数据加密密钥与 JWT 签名密钥同源（密钥复用）
+#### H2. 数据加密密钥与 JWT 签名密钥同源（密钥复用）— ✅ 已修复（见 §三.4）
 - **位置**：`backend/app/core/crypto.py:9-12` → `Fernet(urlsafe_b64encode(sha256(jwt_secret)))`
 - **影响**：用户模型 API Key 的密文（`model_provider_configs.api_key_ciphertext`）用「JWT 密钥派生」的 Fernet key 加密。一旦 JWT 密钥泄露（见 H1/C1），库中所有用户的第三方 API Key 可被批量解密。违反「签名密钥 ≠ 加密密钥」的密钥分离原则。
 - **修复**：引入独立的 `AGENTPRO_SECRET_ENC_KEY`（32 字节 base64），与 JWT 密钥彻底分离；旧数据做一次性迁移重加密。
@@ -167,6 +167,11 @@ if spec:
   - `api_host` 默认改为 `127.0.0.1`（容器/服务器显式设 `0.0.0.0`，Docker CMD 已带 `--host`，部署不受影响）。
   - `docs_enabled` 改为三态（`None` 时按环境推导：local/test 开、其余关），新增 `docs_effective` 属性，`main.py` 改用之。
   - 新增 `tests/test_config_security.py`（5 项），全套 **19/19 通过**。
+
+- **H2｜数据加密密钥与 JWT 密钥分离**（`backend/app/core/crypto.py`、`config.py`、`.env.example`）
+  - 新增独立 `AGENTPRO_SECRET_ENC_KEY`；用 `MultiFernet` 实现惰性密钥轮换：加密用主密钥（优先 `secret_enc_key`），解密依次尝试所有密钥。
+  - 旧密文（JWT 密钥派生）在引入新密钥后**仍可解密**，下次保存自动改用新密钥，**无需停机迁移**；留空则与旧行为一致。
+  - 新增 `tests/test_crypto.py`（2 项，含旧密文兼容性），全套 **21/21 通过**。
 
 ---
 

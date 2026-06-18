@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./agentpro_local.db"
     redis_url: str = "redis://127.0.0.1:6379/0"
     jwt_secret: str = "CHANGE_ME_LOCAL_ONLY"
+    # Dedicated key for encrypting stored secrets (model API keys). Kept separate from
+    # jwt_secret for key separation. Empty => fall back to jwt_secret (legacy behaviour).
+    secret_enc_key: str = ""
     access_token_minutes: int = 30
     refresh_token_days: int = 30
     email_code_expire_minutes: int = 10

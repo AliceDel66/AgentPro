@@ -40,7 +40,7 @@
 
 - [ ] **C1** 轮换并迁出全部生产凭据（RDS / JWT / SMTP），改用环境变量或 KMS 注入。（手动动作）
 - [x] **H1** `get_settings()` 启动校验：非 local/test 环境若 JWT 密钥缺省或 <32 字节则拒绝启动。✅
-- [ ] **H2** 引入独立 `AGENTPRO_SECRET_ENC_KEY`，与 JWT 密钥分离；编写一次性重加密迁移脚本。
+- [x] **H2** 引入独立 `AGENTPRO_SECRET_ENC_KEY`，与 JWT 密钥分离（MultiFernet 惰性轮换，旧密文兼容，无需停机迁移）。✅
 - [ ] **H3** 出站请求 SSRF 防护：对模型 `base_url` 做地址解析 + 私有/保留/回环地址黑名单 + 仅 https + 响应大小限制。
 - [ ] **M1** 基于 Redis 的登录限速与失败锁定（IP + 账号滑动窗口）。
 - [ ] **M2** 评审创建补 spec 归属校验。
