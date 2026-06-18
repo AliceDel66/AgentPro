@@ -191,6 +191,15 @@ export async function apiPost<TBody, TResponse>(path: string, body: TBody, fallb
   return parseApiResponse<TResponse>(response);
 }
 
+export async function apiDelete<TResponse>(path: string, fallback: TResponse): Promise<ApiResult<TResponse>> {
+  if (useMockApi) {
+    return { ok: true, data: fallback, message: "mock fallback" };
+  }
+
+  const response = await authedFetch(path, { method: "DELETE" });
+  return parseApiResponse<TResponse>(response);
+}
+
 interface StreamHandlers<TResponse> {
   onToken?: (token: string) => void;
   onEvent?: (event: string, payload: unknown) => void;

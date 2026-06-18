@@ -1,6 +1,6 @@
 import { requirementLibraryRows } from "../lib/mockData";
-import { apiGet, apiPost, apiPostStream } from "./apiClient";
-import type { AgentRequirement, AgentSpecDraft, RequirementActionResult, RequirementDetail } from "./types";
+import { apiDelete, apiGet, apiPost, apiPostStream } from "./apiClient";
+import type { AgentRequirement, AgentSpecDraft, RequirementActionResult, RequirementDeleteResult, RequirementDetail } from "./types";
 
 const mockRequirements: AgentRequirement[] = requirementLibraryRows.map((row, index) => ({
   id: `req_mock_${index + 1}`,
@@ -10,8 +10,9 @@ const mockRequirements: AgentRequirement[] = requirementLibraryRows.map((row, in
   route: row.route
 }));
 
-export function listRequirements() {
-  return apiGet("/requirements", mockRequirements);
+export function listRequirements(options: { includeTrash?: boolean } = {}) {
+  const query = options.includeTrash ? "?includeTrash=true" : "";
+  return apiGet(`/requirements${query}`, mockRequirements);
 }
 
 export function getRequirementDetail(requirementId: string) {
@@ -155,5 +156,28 @@ export function archiveRequirement(requirementId: string) {
     id: requirementId,
     status: "archived",
     spec: null
+  });
+}
+
+export function trashRequirement(requirementId: string) {
+  return apiPost<object, RequirementActionResult>(`/requirements/${requirementId}/trash`, {}, {
+    id: requirementId,
+    status: "trashed",
+    spec: null
+  });
+}
+
+export function restoreRequirement(requirementId: string) {
+  return apiPost<object, RequirementActionResult>(`/requirements/${requirementId}/restore`, {}, {
+    id: requirementId,
+    status: "archived",
+    spec: null
+  });
+}
+
+export function deleteRequirement(requirementId: string) {
+  return apiDelete<RequirementDeleteResult>(`/requirements/${requirementId}`, {
+    id: requirementId,
+    deleted: true
   });
 }

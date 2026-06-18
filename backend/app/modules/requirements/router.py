@@ -4,7 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,7 @@ from app.modules.requirements.schemas import (
     FollowupConfirmRequest,
     RequirementActionResponse,
     RequirementCreate,
+    RequirementDeleteResponse,
     RequirementDetail,
     RequirementListItem,
     RequirementMessageCreate,
@@ -410,12 +411,17 @@ async def create_requirement_stream(
 
 @router.get("")
 async def list_requirements(
+    include_trash: bool = Query(False, alias="includeTrash"),
     session: AsyncSession = db_session_dependency,
     current_user: User = current_user_dependency,
 ):
+    filters = [Requirement.user_id == current_user.id]
+    if not include_trash:
+        filters.append(Requirement.status != "trashed")
+
     result = await session.execute(
         select(Requirement)
-        .where(Requirement.user_id == current_user.id)
+        .where(*filters)
         .order_by(Requirement.updated_at.desc())
     )
     return ok(
@@ -425,7 +431,7 @@ async def list_requirements(
                 title=requirement.title,
                 status=requirement.status,
                 maturity=requirement.maturity,
-                route="chat",
+                route="library" if requirement.status == "trashed" else requirement.route or "chat",
             )
             for requirement in result.scalars().all()
         ]
@@ -616,3 +622,74 @@ async def archive_requirement(
     requirement.status = "archived"
     await session.commit()
     return ok(RequirementActionResponse(id=requirement.id, status=requirement.status))
+
+
+@router.post("/{requirement_id}/trash")
+async def trash_requirement(
+    requirement_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = await get_owned_requirement(requirement_id, session, current_user)
+    previous_status = requirement.status
+    requirement.status = "trashed"
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="requirement.trash",
+        resource_type="requirement",
+        resource_id=requirement.id,
+        payload={"previousStatus": previous_status},
+    )
+    await session.commit()
+    return ok(RequirementActionResponse(id=requirement.id, status=requirement.status))
+
+
+@router.post("/{requirement_id}/restore")
+async def restore_requirement(
+    requirement_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = await get_owned_requirement(requirement_id, session, current_user)
+    if requirement.status != "trashed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Requirement is not in trash",
+        )
+    requirement.status = "archived"
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="requirement.restore",
+        resource_type="requirement",
+        resource_id=requirement.id,
+        payload={"restoredStatus": requirement.status},
+    )
+    await session.commit()
+    return ok(RequirementActionResponse(id=requirement.id, status=requirement.status))
+
+
+@router.delete("/{requirement_id}")
+async def delete_requirement(
+    requirement_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = await get_owned_requirement(requirement_id, session, current_user)
+    if requirement.status != "trashed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Move requirement to trash before deleting permanently",
+        )
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="requirement.delete",
+        resource_type="requirement",
+        resource_id=requirement.id,
+        payload={"title": requirement.title},
+    )
+    await session.delete(requirement)
+    await session.commit()
+    return ok(RequirementDeleteResponse(id=requirement_id, deleted=True))

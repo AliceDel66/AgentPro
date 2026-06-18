@@ -128,6 +128,77 @@ async def test_requirement_interview_flow(api_client: AsyncClient) -> None:
     assert archive_response.json()["data"]["status"] == "archived"
 
 
+async def test_requirement_trash_restore_and_permanent_delete(api_client: AsyncClient) -> None:
+    headers = await auth_headers(api_client)
+    create_response = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={
+            "title": "可回收需求",
+            "initialMessage": "做一个能整理研发周报的 Agent。",
+        },
+    )
+    assert create_response.status_code == 200
+    requirement_id = create_response.json()["data"]["id"]
+
+    premature_delete = await api_client.delete(
+        f"/api/v1/requirements/{requirement_id}",
+        headers=headers,
+    )
+    assert premature_delete.status_code == 400
+
+    trash_response = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/trash",
+        headers=headers,
+        json={},
+    )
+    assert trash_response.status_code == 200
+    assert trash_response.json()["data"]["status"] == "trashed"
+
+    default_list = await api_client.get("/api/v1/requirements", headers=headers)
+    assert default_list.status_code == 200
+    assert all(item["id"] != requirement_id for item in default_list.json()["data"])
+
+    trash_list = await api_client.get(
+        "/api/v1/requirements?includeTrash=true",
+        headers=headers,
+    )
+    assert trash_list.status_code == 200
+    trash_item = next(item for item in trash_list.json()["data"] if item["id"] == requirement_id)
+    assert trash_item["status"] == "trashed"
+    assert trash_item["route"] == "library"
+
+    restore_response = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/restore",
+        headers=headers,
+        json={},
+    )
+    assert restore_response.status_code == 200
+    assert restore_response.json()["data"]["status"] == "archived"
+
+    restored_list = await api_client.get("/api/v1/requirements", headers=headers)
+    assert restored_list.status_code == 200
+    assert any(item["id"] == requirement_id for item in restored_list.json()["data"])
+
+    await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/trash",
+        headers=headers,
+        json={},
+    )
+    delete_response = await api_client.delete(
+        f"/api/v1/requirements/{requirement_id}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json()["data"] == {"id": requirement_id, "deleted": True}
+
+    detail_response = await api_client.get(
+        f"/api/v1/requirements/{requirement_id}",
+        headers=headers,
+    )
+    assert detail_response.status_code == 404
+
+
 def test_requirement_graph_filters_confirmed_followup_keys() -> None:
     state = run_requirement_graph(
         [

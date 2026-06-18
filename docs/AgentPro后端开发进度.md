@@ -530,3 +530,40 @@
 - Commit：
   - 哈希：待提交
   - 信息：修复需求反问重复追问问题
+
+### 20. 需求库垃圾篓与回收处理
+- 状态：已完成
+- 完成功能：
+  - 新增需求软删除状态 `trashed`，普通需求列表默认不返回垃圾篓数据
+  - `GET /api/v1/requirements?includeTrash=true` 支持前端需求库读取含垃圾篓的全集
+  - 新增 `POST /api/v1/requirements/{id}/trash`，将需求移入垃圾篓并记录审计日志
+  - 新增 `POST /api/v1/requirements/{id}/restore`，从垃圾篓恢复为已归档状态并记录审计日志
+  - 新增 `DELETE /api/v1/requirements/{id}`，仅允许对垃圾篓内需求执行永久删除
+  - 前端需求库新增垃圾篓统计卡与筛选项
+  - 普通需求行支持移入垃圾篓，垃圾篓行支持恢复与永久删除
+  - 前端服务层新增 `trashRequirement`、`restoreRequirement`、`deleteRequirement`
+  - 新增回归测试：直接永久删除被拒绝、移入垃圾篓后默认列表隐藏、includeTrash 可见、恢复后重新出现在列表、垃圾篓内可永久删除
+- 设计决策：
+  - 本轮不新增数据库字段，直接复用现有 `requirements.status` 字符串字段，避免为回收站引入迁移风险
+  - 恢复后统一进入 `archived`，避免误恢复到开发中状态造成任务流重新触发
+  - 永久删除必须先经过垃圾篓，降低误删 AgentSpec、对话与决策数据的风险
+- 相关文件：
+  - backend/app/modules/requirements/router.py
+  - backend/app/modules/requirements/schemas.py
+  - backend/tests/test_requirements.py
+  - src/services/apiClient.ts
+  - src/services/agentSpecService.ts
+  - src/services/types.ts
+  - src/pages/workspace/LibraryPage.tsx
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_requirements.py（9 passed）
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（51 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：完成需求库垃圾篓与回收处理

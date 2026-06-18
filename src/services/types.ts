@@ -78,6 +78,11 @@ export interface RequirementActionResult {
   spec?: AgentSpecDraft | null;
 }
 
+export interface RequirementDeleteResult {
+  id: string;
+  deleted: boolean;
+}
+
 export interface RunnerRequest {
   specId?: string;
   requirementId?: string;

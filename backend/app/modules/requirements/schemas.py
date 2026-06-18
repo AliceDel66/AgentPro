@@ -63,3 +63,8 @@ class RequirementActionResponse(BaseModel):
     id: str
     status: str
     spec: AgentSpecPayload | None = None
+
+
+class RequirementDeleteResponse(BaseModel):
+    id: str
+    deleted: bool
