@@ -1,8 +1,13 @@
+from datetime import timedelta
+from importlib import import_module
+
 from httpx import AsyncClient
 
 from app.core.config import get_settings
 from app.db.models import AgentSpec, DevJob, Requirement, ReviewFinding, ReviewReport
 from app.modules.runner.executor import prompt_for_job
+
+runner_router_module = import_module("app.modules.runner.router")
 
 
 async def register_headers(client: AsyncClient, email: str) -> dict[str, str]:
@@ -98,6 +103,53 @@ async def test_runner_job_lease_event_and_artifact(api_client: AsyncClient) -> N
     assert "event: snapshot" in stream_response.text
     assert "event: log" in stream_response.text
     assert "event: heartbeat" in stream_response.text
+
+
+async def test_desktop_runner_heartbeat_timeout_marks_job_blocked(
+    api_client: AsyncClient,
+    monkeypatch,
+) -> None:
+    headers = await runner_auth_headers(api_client)
+    spec_id = await create_owned_spec(api_client, headers)
+    create_response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "codex", "specId": spec_id},
+    )
+    job_id = create_response.json()["data"]["id"]
+
+    lease_response = await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/lease",
+        headers=headers,
+        json={"runnerId": "agentpro-desktop-local"},
+    )
+    assert lease_response.status_code == 200
+
+    event_response = await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/events",
+        headers=headers,
+        json={
+            "phase": "desktop.runner.progress",
+            "message": "桌面端 Runner 心跳",
+            "progress": 25,
+            "status": "running",
+        },
+    )
+    assert event_response.status_code == 200
+
+    monkeypatch.setattr(
+        runner_router_module, "DESKTOP_RUNNER_STALE_TIMEOUT", timedelta(seconds=-1)
+    )
+    job_response = await api_client.get(f"/api/v1/dev-jobs/{job_id}", headers=headers)
+
+    assert job_response.status_code == 200
+    job = job_response.json()["data"]
+    assert job["status"] == "blocked"
+    assert job["progress"] == 25
+
+    events_response = await api_client.get(f"/api/v1/dev-jobs/{job_id}/events", headers=headers)
+    phases = [item["phase"] for item in events_response.json()["data"]]
+    assert "desktop.runner.stale" in phases
 
 
 async def test_runner_execute_records_unavailable_engine(

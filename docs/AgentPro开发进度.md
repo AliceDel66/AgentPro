@@ -784,5 +784,24 @@
   - 已通过 git diff --check
   - 已完成敏感信息扫描，命中项均为文档说明或 `secretSaved` 类型字段，未发现真实密钥
 - Commit：
-  - 哈希：本提交
+  - 哈希：23eac75
   - 信息：修复 Runner 监控进度心跳显示
+
+### 31. 桌面 Runner 阻塞与离线兜底修复
+- 状态：已完成
+- 完成功能：
+  - Tauri `execute_agent_runner` 从同步阻塞命令改为 `spawn_blocking` 异步执行，避免 Codex / Claude Code 长任务卡住桌面端 WebView
+  - 保持本机 Runner 执行协议不变，仍由桌面端调用客户本机 CLI、写入隔离工作区并捕获 stdout/stderr/diff
+  - 配合后端心跳超时兜底，桌面端执行器退出或无响应后，监控页不再永久停留在“等待执行 / 0%”
+- 相关文件：
+  - src-tauri/src/lib.rs
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 cargo fmt --check
+  - 已通过 cargo check（src-tauri）
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 git diff --check
+- Commit：
+  - 哈希：本提交
+  - 信息：修复桌面 Runner 阻塞与离线兜底

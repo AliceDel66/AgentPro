@@ -645,5 +645,24 @@
   - 已通过 git diff --check
   - 已完成敏感信息扫描，命中项均为文档说明或 `secretSaved` 类型字段，未发现真实密钥
 - Commit：
-  - 哈希：本提交
+  - 哈希：23eac75
   - 信息：修复 Runner 监控进度心跳显示
+
+### 24. 桌面 Runner 心跳超时兜底
+- 状态：已完成
+- 完成功能：
+  - 后端在读取 DevJob、事件列表和 SSE stream 时检查桌面 Runner 心跳
+  - 对 `agentpro-desktop-*` 租约持有者，如果非终态任务超过 90 秒没有新事件，会自动写入 `desktop.runner.stale` 事件
+  - stale 任务会被标记为 `blocked`，保留当前进度，避免真实桌面执行器退出后任务永久停留在 running/queued
+  - 新增回归测试覆盖桌面 Runner 心跳超时后自动阻塞任务
+- 相关文件：
+  - backend/app/modules/runner/router.py
+  - backend/tests/test_runner.py
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_runner.py（11 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/runner backend/tests/test_runner.py
+  - 已通过 git diff --check
+- Commit：
+  - 哈希：本提交
+  - 信息：修复桌面 Runner 阻塞与离线兜底

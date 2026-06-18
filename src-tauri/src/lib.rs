@@ -74,7 +74,10 @@ fn resolve_program(engine: &str) -> Result<String, String> {
 
 fn safe_path(input: &str) -> Result<String, String> {
     let path = PathBuf::from(input);
-    if path.components().any(|component| matches!(component, std::path::Component::ParentDir)) {
+    if path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
         return Err("Path must not contain parent directory segments".to_string());
     }
     Ok(path.to_string_lossy().to_string())
@@ -91,7 +94,10 @@ fn default_repo_path() -> Result<PathBuf, String> {
 }
 
 fn should_ignore(path: &Path) -> bool {
-    let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
     matches!(
         name,
         ".git"
@@ -201,7 +207,11 @@ fn trim_output(value: String) -> String {
     if value.len() <= LIMIT {
         value
     } else {
-        format!("{}\n...[truncated {} chars]", &value[..LIMIT], value.len() - LIMIT)
+        format!(
+            "{}\n...[truncated {} chars]",
+            &value[..LIMIT],
+            value.len() - LIMIT
+        )
     }
 }
 
@@ -267,8 +277,7 @@ fn start_agent_runner(
     })
 }
 
-#[tauri::command]
-fn execute_agent_runner(
+fn execute_agent_runner_blocking(
     engine: String,
     job_id: String,
     prompt: String,
@@ -297,7 +306,9 @@ fn execute_agent_runner(
             .map_err(|error| error.to_string())?;
     }
 
-    let output = child.wait_with_output().map_err(|error| error.to_string())?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| error.to_string())?;
     let duration = started.elapsed().as_secs_f64();
     let diff_stat = run_git_capture(&workdir, &["diff", "--stat"]);
     let diff = run_git_capture(&workdir, &["diff"]);
@@ -314,6 +325,21 @@ fn execute_agent_runner(
         diff_stat,
         diff,
     })
+}
+
+#[tauri::command]
+async fn execute_agent_runner(
+    engine: String,
+    job_id: String,
+    prompt: String,
+    repo_path: Option<String>,
+    workspace_root: Option<String>,
+) -> Result<LocalRunnerResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        execute_agent_runner_blocking(engine, job_id, prompt, repo_path, workspace_root)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 pub fn run() {

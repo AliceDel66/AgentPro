@@ -35,6 +35,8 @@ router = APIRouter(prefix="/dev-jobs")
 db_session_dependency = Depends(get_db_session)
 current_user_dependency = Depends(get_current_user)
 TERMINAL_JOB_STATUSES = {"completed", "completed_with_warnings", "failed", "blocked"}
+DESKTOP_RUNNER_ID_PREFIX = "agentpro-desktop"
+DESKTOP_RUNNER_STALE_TIMEOUT = timedelta(seconds=90)
 
 
 def session_factory_for_request(request: Request):
@@ -56,6 +58,56 @@ def serialize_job(job: DevJob) -> DevJobPayload:
         specId=job.spec_id,
         sourceReviewId=job.source_review_id,
     )
+
+
+def ensure_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+async def latest_event_for_job(session: AsyncSession, job_id: str) -> DevJobEvent | None:
+    result = await session.execute(
+        select(DevJobEvent)
+        .where(DevJobEvent.job_id == job_id)
+        .order_by(DevJobEvent.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def mark_stale_desktop_job_if_needed(session: AsyncSession, job: DevJob) -> DevJob:
+    if job.status in TERMINAL_JOB_STATUSES:
+        return job
+    if not job.lease_owner or not job.lease_owner.startswith(DESKTOP_RUNNER_ID_PREFIX):
+        return job
+
+    latest_event = await latest_event_for_job(session, job.id)
+    last_seen_at = ensure_utc(
+        latest_event.created_at if latest_event else job.updated_at or job.created_at
+    )
+    if last_seen_at and datetime.now(UTC) - last_seen_at <= DESKTOP_RUNNER_STALE_TIMEOUT:
+        return job
+
+    job.status = "blocked"
+    session.add(
+        DevJobEvent(
+            job_id=job.id,
+            level="error",
+            phase="desktop.runner.stale",
+            message="本地 Runner 心跳超时，桌面端执行器可能已退出或无响应。",
+            payload={
+                "status": "blocked",
+                "progress": job.progress,
+                "lastSeenAt": last_seen_at.isoformat() if last_seen_at else None,
+            },
+        )
+    )
+    await session.commit()
+    await session.refresh(job)
+    return job
 
 
 async def get_owned_job(job_id: str, session: AsyncSession, user: User) -> DevJob:
@@ -156,7 +208,9 @@ async def get_dev_job(
     session: AsyncSession = db_session_dependency,
     current_user: User = current_user_dependency,
 ):
-    return ok(serialize_job(await get_owned_job(job_id, session, current_user)))
+    job = await get_owned_job(job_id, session, current_user)
+    job = await mark_stale_desktop_job_if_needed(session, job)
+    return ok(serialize_job(job))
 
 
 @router.get("/{job_id}/runner-package")
@@ -339,6 +393,7 @@ async def list_dev_job_events(
     current_user: User = current_user_dependency,
 ):
     job = await get_owned_job(job_id, session, current_user)
+    await mark_stale_desktop_job_if_needed(session, job)
     result = await session.execute(
         select(DevJobEvent)
         .where(DevJobEvent.job_id == job.id)
@@ -368,6 +423,7 @@ async def stream_dev_job(
     current_user: User = current_user_dependency,
 ):
     job = await get_owned_job(job_id, session, current_user)
+    job = await mark_stale_desktop_job_if_needed(session, job)
     result = await session.execute(
         select(DevJobEvent)
         .where(DevJobEvent.job_id == job.id)
