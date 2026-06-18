@@ -528,7 +528,7 @@
   - 已通过 git diff --check
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：待提交
+  - 哈希：234b839
   - 信息：修复需求反问重复追问问题
 
 ### 20. 需求库垃圾篓与回收处理
@@ -565,7 +565,7 @@
   - 已通过 git diff --check
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：待提交
+  - 哈希：f0ee7a9
   - 信息：完成需求库垃圾篓与回收处理
 
 ### 21. 异步真实开发执行与报告优化闭环
@@ -598,5 +598,5 @@
   - 已通过 backend/.venv/bin/python -m pytest backend/tests（56 passed）
   - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
 - Commit：
-  - 哈希：待提交
+  - 哈希：d438bc4
   - 信息：完成异步真实开发执行与报告优化闭环
