@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import record_audit
 from app.core.crypto import decrypt_secret, encrypt_secret
 from app.core.net import assert_safe_outbound_url
 from app.core.responses import ok
@@ -102,6 +103,15 @@ async def update_model_config(
             config.api_key_ciphertext = encrypt_secret(secret)
             config.secret_saved = True
 
+    await session.flush()
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="model_config.update",
+        resource_type="model_config",
+        resource_id=config.id,
+        payload={"provider": config.provider, "secretSaved": config.secret_saved},
+    )
     await session.commit()
     return ok(serialize_config(config))
 

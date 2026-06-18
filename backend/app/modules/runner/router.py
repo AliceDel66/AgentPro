@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import record_audit
 from app.core.responses import ok
 from app.db.models import DevJob, DevJobArtifact, DevJobEvent, User
 from app.db.session import get_db_session
@@ -65,6 +66,19 @@ async def create_dev_job(
         progress=0,
     )
     session.add(job)
+    await session.flush()
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="dev_job.create",
+        resource_type="dev_job",
+        resource_id=job.id,
+        payload={
+            "strategy": job.strategy,
+            "specId": job.spec_id,
+            "requirementId": job.requirement_id,
+        },
+    )
     await session.commit()
     return ok(serialize_job(job))
 

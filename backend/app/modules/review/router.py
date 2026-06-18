@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import record_audit
 from app.core.responses import ok
 from app.db.models import (
     AgentSpec,
@@ -178,6 +179,14 @@ async def accept_review(
 ):
     report = await get_owned_report(review_id, session, current_user)
     report.status = "accepted"
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="review.accept",
+        resource_type="review",
+        resource_id=report.id,
+        payload={"recommendedEngine": report.recommended_engine},
+    )
     await session.commit()
     return ok(ReviewActionResponse(id=report.id, status=report.status))
 

@@ -132,7 +132,7 @@ if spec:
 | L4 | `src/pages/workspace/SettingsPage.tsx` | 账号区为硬编码假数据（"张明…最后同步 3 分钟前"） | ✅ 已修复（见 §三.5） |
 | L5 | `.gitignore` | 未忽略 `backend/*.db`，`agentpro_local.db` 处于未跟踪状态 | `.gitignore` 增加 `backend/*.db` |
 | L6 | `VITE_AGENTPRO_MOCK_API` | mock fallback 返回假用户/假会话，误开会掩盖真实错误 | ✅ 已修复（见 §三.5） |
-| L7 | `app/db/models.py:324`（`AuditLog`） | 审计表已建模但未见写入 | 在高风险动作处落审计日志 |
+| L7 | `app/db/models.py`（`AuditLog`） | 审计表已建模但未见写入 | ✅ 已修复（见 §三.5） |
 
 ---
 
@@ -207,6 +207,13 @@ if spec:
 
 - **L6｜Mock 开关治理**（`src/services/apiClient.ts`）
   - `VITE_AGENTPRO_MOCK_API` 仅在 `import.meta.env.DEV` 生效，生产构建强制忽略，并在控制台显著告警，避免假数据掩盖真实错误流入生产。
+
+- **L7｜审计日志落地**（`backend/app/core/audit.py` + 各 router）
+  - 新增 `record_audit` 助手；在需求审批、开发任务创建、评审采纳、模型密钥变更四处写入 `audit_logs`（仅记录元数据，**密钥不入库**）。
+  - 新增 `tests/test_audit.py`（写入校验），全套 **39/39 通过**。
+  - 残留：审计日志读取/管理界面与 90 天保留策略见 P3。
+
+> P1 已落地 L2/L3/L4/L6/L7；**M4（令牌安全存储，需 Tauri 插件 + 能力配置）**留待单独推进。
 
 ---
 

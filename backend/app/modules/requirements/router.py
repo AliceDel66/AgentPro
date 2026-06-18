@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import record_audit
 from app.core.responses import ok
 from app.db.models import (
     AgentGraphRun,
@@ -423,6 +424,14 @@ async def approve_requirement(
         spec = await create_spec_from_requirement(session, requirement)
     spec.status = "approved"
     requirement.status = "approved"
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="requirement.approve",
+        resource_type="requirement",
+        resource_id=requirement.id,
+        payload={"specId": spec.id},
+    )
     await session.commit()
     return ok(
         RequirementActionResponse(
