@@ -1,13 +1,21 @@
 import type { ApiResult, AuthSession } from "./types";
 
 const serverBaseUrl = import.meta.env.VITE_AGENTPRO_SERVER_URL?.trim() ?? "";
-const useMockApi = import.meta.env.VITE_AGENTPRO_MOCK_API === "true";
+const mockApiRequested = import.meta.env.VITE_AGENTPRO_MOCK_API === "true";
+// Mock mode is dev-only: production builds always hit the real backend, even if the flag leaks.
+const useMockApi = mockApiRequested && import.meta.env.DEV;
 const normalizedServerUrl = serverBaseUrl.replace(/\/$/, "");
 const apiBaseUrl = normalizedServerUrl
   ? normalizedServerUrl.endsWith("/api/v1")
     ? normalizedServerUrl
     : `${normalizedServerUrl}/api/v1`
   : "/api/v1";
+
+if (useMockApi) {
+  console.warn("[AgentPro] Mock API 已开启：所有请求返回本地假数据，请勿用于真实联调或生产。");
+} else if (mockApiRequested) {
+  console.warn("[AgentPro] 已忽略 VITE_AGENTPRO_MOCK_API：mock 仅在开发环境生效，生产构建始终走真实后端。");
+}
 
 function isApiResult<T>(payload: unknown): payload is ApiResult<T> {
   return Boolean(

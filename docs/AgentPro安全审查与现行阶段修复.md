@@ -131,7 +131,7 @@ if spec:
 | L3 | `src/pages/auth/ForgotPasswordPage.tsx` | 页面未接任何 API，后端也无重置密码端点 | ✅ 已修复（见 §三.5） |
 | L4 | `src/pages/workspace/SettingsPage.tsx` | 账号区为硬编码假数据（"张明…最后同步 3 分钟前"） | ✅ 已修复（见 §三.5） |
 | L5 | `.gitignore` | 未忽略 `backend/*.db`，`agentpro_local.db` 处于未跟踪状态 | `.gitignore` 增加 `backend/*.db` |
-| L6 | `VITE_AGENTPRO_MOCK_API` | mock fallback 返回假用户/假会话，误开会掩盖真实错误 | 生产构建禁用并加显著告警 |
+| L6 | `VITE_AGENTPRO_MOCK_API` | mock fallback 返回假用户/假会话，误开会掩盖真实错误 | ✅ 已修复（见 §三.5） |
 | L7 | `app/db/models.py:324`（`AuditLog`） | 审计表已建模但未见写入 | 在高风险动作处落审计日志 |
 
 ---
@@ -204,6 +204,9 @@ if spec:
 - **L2｜Token 自动续期**（`src/services/apiClient.ts`）
   - 新增 `authedFetch`：请求遇 401（非 `/auth/*`）时用 refresh token 自动续签并重放一次；`ensureRefreshed` 对并发 401 去重为单次 `/auth/refresh`；刷新失败清空本地令牌。
   - 残留：刷新失败后的「自动跳转登录页」需 App 级鉴权守卫配合（见 P3）。
+
+- **L6｜Mock 开关治理**（`src/services/apiClient.ts`）
+  - `VITE_AGENTPRO_MOCK_API` 仅在 `import.meta.env.DEV` 生效，生产构建强制忽略，并在控制台显著告警，避免假数据掩盖真实错误流入生产。
 
 ---
 
