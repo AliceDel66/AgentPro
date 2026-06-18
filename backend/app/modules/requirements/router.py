@@ -1,7 +1,11 @@
+import asyncio
+import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +21,10 @@ from app.db.models import (
 )
 from app.db.session import get_db_session
 from app.modules.auth.router import get_current_user
-from app.modules.requirements.ai_service import run_ai_requirement_graph
+from app.modules.requirements.ai_service import (
+    run_ai_requirement_graph,
+    stream_ai_requirement_message,
+)
 from app.modules.requirements.graph import RequirementGraphState, run_requirement_graph
 from app.modules.requirements.schemas import (
     AgentSpecPayload,
@@ -113,6 +120,17 @@ def assistant_followup_text(graph_state: RequirementGraphState) -> str:
     lines = ["我整理了几个需要你确认的问题："]
     lines.extend(f"{index}. {item['question']}" for index, item in enumerate(questions, start=1))
     return "\n".join(lines)
+
+
+def sse_event(event: str, payload: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+async def stream_text_chunks(text: str, chunk_size: int = 3) -> AsyncIterator[str]:
+    content = text.strip()
+    for index in range(0, len(content), chunk_size):
+        yield content[index : index + chunk_size]
+        await asyncio.sleep(0)
 
 
 def serialize_spec(spec: AgentSpec) -> AgentSpecPayload:
@@ -242,6 +260,75 @@ async def build_detail(
     )
 
 
+async def stream_requirement_answer(
+    session: AsyncSession,
+    requirement: Requirement,
+    current_user: User,
+    confirmed_decisions: list[dict[str, Any]] | None = None,
+) -> AsyncIterator[str]:
+    decisions = confirmed_decisions or await load_decisions(session, requirement.id)
+    messages = [
+        {"role": message.role, "content": message.content}
+        for message in await load_messages(session, requirement.id)
+    ]
+    assistant_parts: list[str] = []
+    stream_error: Exception | None = None
+
+    try:
+        async for token in stream_ai_requirement_message(
+            session,
+            current_user.id,
+            requirement.title,
+            messages,
+            confirmed_decisions=decisions,
+        ):
+            assistant_parts.append(token)
+            yield sse_event("token", {"content": token})
+    except Exception as exc:
+        stream_error = exc
+        logger.warning(
+            "Requirement AI stream failed, falling back to rules: %s",
+            exc.__class__.__name__,
+        )
+
+    assistant_text = "".join(assistant_parts).strip()
+    if assistant_text:
+        graph_state = run_requirement_graph(messages, confirmed_decisions=decisions)
+        graph_state["assistantMessage"] = assistant_text
+        graph_state["model"] = "stream"
+        graph_state["aiResponseFormat"] = "stream_text"
+        graph_name = "AIStreamRequirementGraph"
+        if stream_error:
+            suffix = (
+                "\n\n模型流式响应中断，我已保留已收到的内容。"
+                "你可以继续补充需求，系统会重新整理。"
+            )
+            graph_state["assistantMessage"] = f"{assistant_text}{suffix}"
+            graph_state["aiStreamInterrupted"] = True
+            async for token in stream_text_chunks(suffix):
+                yield sse_event("token", {"content": token})
+            assistant_text = graph_state["assistantMessage"]
+    else:
+        graph_state = run_requirement_graph(messages, confirmed_decisions=decisions)
+        graph_name = "RequirementGraph"
+        assistant_text = assistant_followup_text(graph_state)
+        async for token in stream_text_chunks(assistant_text):
+            yield sse_event("token", {"content": token})
+
+    session.add(
+        ConversationMessage(
+            requirement_id=requirement.id,
+            role="assistant",
+            content=assistant_text,
+            message_metadata={"graph": graph_name, "streamed": True},
+        )
+    )
+    graph_run = await persist_graph_run(session, requirement, graph_state, graph_name)
+    await session.commit()
+    detail = await build_detail(session, requirement, graph_state, graph_run.id)
+    yield sse_event("detail", detail.model_dump(mode="json"))
+
+
 @router.post("")
 async def create_requirement(
     body: RequirementCreate,
@@ -274,6 +361,32 @@ async def create_requirement(
     graph_run = await persist_graph_run(session, requirement, graph_state, graph_name)
     await session.commit()
     return ok(await build_detail(session, requirement, graph_state, graph_run.id))
+
+
+@router.post("/stream")
+async def create_requirement_stream(
+    body: RequirementCreate,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = Requirement(user_id=current_user.id, title=body.title, status="interviewing")
+    session.add(requirement)
+    await session.flush()
+
+    if body.initialMessage:
+        session.add(
+            ConversationMessage(
+                requirement_id=requirement.id,
+                role="user",
+                content=body.initialMessage,
+            )
+        )
+        await session.flush()
+
+    return StreamingResponse(
+        stream_requirement_answer(session, requirement, current_user),
+        media_type="text/event-stream",
+    )
 
 
 @router.get("")
@@ -335,6 +448,24 @@ async def add_requirement_message(
     graph_run = await persist_graph_run(session, requirement, graph_state, graph_name)
     await session.commit()
     return ok(await build_detail(session, requirement, graph_state, graph_run.id))
+
+
+@router.post("/{requirement_id}/messages/stream")
+async def add_requirement_message_stream(
+    requirement_id: str,
+    body: RequirementMessageCreate,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = await get_owned_requirement(requirement_id, session, current_user)
+    session.add(
+        ConversationMessage(requirement_id=requirement.id, role="user", content=body.content)
+    )
+    await session.flush()
+    return StreamingResponse(
+        stream_requirement_answer(session, requirement, current_user),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("/{requirement_id}/followups/confirm")

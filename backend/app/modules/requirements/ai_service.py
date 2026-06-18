@@ -1,5 +1,6 @@
 import json
 import re
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -41,6 +42,19 @@ SYSTEM_PROMPT = """你是 AgentPro 的需求访谈与 Agent 架构助手。
 - 当需求足够清晰时，followupQuestions 返回空数组，assistantMessage 提示可以生成 AgentSpec 草案。
 - 高风险动作包括支付、退款、删除、写入生产数据、发送外部消息、审批绕过等。
 - 发现高风险动作时，必须在 safetyReview 中说明。
+"""
+
+STREAM_SYSTEM_PROMPT = """你是 AgentPro 的需求访谈与 Agent 架构助手。
+请基于当前对话，用中文直接回复用户下一步需要确认的内容。
+
+规则:
+- 输出自然的用户可读文本，不要输出 JSON。
+- 先简短总结你理解到的需求，再提出最关键的 2-5 个反问或确认项。
+- 反问必须结合用户真实业务，不要机械套用模板。
+- 不要编造用户没有给出的业务事实；不确定时明确请用户确认。
+- 如涉及支付、退款、删除、生产数据写入、外部消息发送、
+  审批绕过等高风险动作，必须提醒权限和人工审批边界。
+- 如果需求已经足够清晰，提示可以生成 AgentSpec 草案。
 """
 
 
@@ -104,6 +118,69 @@ async def call_openai_chat_completion(
         ]
         return "\n".join(part for part in parts if part)
     raise ValueError("AI response content is not text")
+
+
+def extract_stream_delta(payload: dict[str, Any]) -> str:
+    choices = payload.get("choices", [])
+    if not choices or not isinstance(choices[0], dict):
+        return ""
+
+    delta = choices[0].get("delta", {})
+    content = delta.get("content", "") if isinstance(delta, dict) else ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            item.get("text", "")
+            for item in content
+            if isinstance(item, dict) and isinstance(item.get("text"), str)
+        ]
+        return "".join(parts)
+    return ""
+
+
+async def call_openai_chat_completion_stream(
+    base_url: str,
+    api_key: str | None,
+    model: str,
+    messages: list[dict[str, str]],
+) -> AsyncIterator[str]:
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    chat_url = build_chat_url(base_url)
+    assert_safe_outbound_url(chat_url)
+    async with httpx.AsyncClient(timeout=None) as client:
+        async with client.stream(
+            "POST",
+            chat_url,
+            headers=headers,
+            json={
+                "model": model,
+                "messages": messages,
+                "temperature": 0.2,
+                "stream": True,
+            },
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line or line.startswith(":"):
+                    continue
+                if not line.startswith("data:"):
+                    continue
+
+                data = line.removeprefix("data:").strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    payload = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(payload, dict):
+                    token = extract_stream_delta(payload)
+                    if token:
+                        yield token
 
 
 def extract_json_object(content: str) -> dict[str, Any]:
@@ -315,3 +392,34 @@ async def run_ai_requirement_graph(
         decisions,
         config.default_model,
     )
+
+
+async def stream_ai_requirement_message(
+    session: AsyncSession,
+    user_id: str,
+    requirement_title: str,
+    messages: list[dict[str, str]],
+    confirmed_decisions: list[dict[str, Any]] | None = None,
+) -> AsyncIterator[str]:
+    config = await load_latest_model_config(session, user_id)
+    if not config or not config.base_url or not config.default_model:
+        return
+
+    user_payload = {
+        "requirementTitle": requirement_title,
+        "conversation": messages,
+        "confirmedDecisions": confirmed_decisions or [],
+    }
+    async for token in call_openai_chat_completion_stream(
+        config.base_url,
+        decrypt_secret(config.api_key_ciphertext),
+        config.default_model,
+        [
+            {"role": "system", "content": STREAM_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps(user_payload, ensure_ascii=False),
+            },
+        ],
+    ):
+        yield token

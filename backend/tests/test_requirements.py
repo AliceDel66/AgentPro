@@ -24,6 +24,21 @@ async def auth_headers(client: AsyncClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def parse_sse_events(text: str) -> list[tuple[str, dict]]:
+    events: list[tuple[str, dict]] = []
+    for block in text.strip().split("\n\n"):
+        event = "message"
+        data_lines: list[str] = []
+        for line in block.splitlines():
+            if line.startswith("event:"):
+                event = line.removeprefix("event:").strip()
+            elif line.startswith("data:"):
+                data_lines.append(line.removeprefix("data:").strip())
+        if data_lines:
+            events.append((event, json.loads("\n".join(data_lines))))
+    return events
+
+
 async def test_requirement_interview_flow(api_client: AsyncClient) -> None:
     headers = await auth_headers(api_client)
     create_response = await api_client.post(
@@ -109,6 +124,46 @@ async def test_requirement_interview_flow(api_client: AsyncClient) -> None:
     )
     assert archive_response.status_code == 200
     assert archive_response.json()["data"]["status"] == "archived"
+
+
+async def test_requirement_chat_streams_tokens_and_detail(api_client: AsyncClient) -> None:
+    headers = await auth_headers(api_client)
+    async with api_client.stream(
+        "POST",
+        "/api/v1/requirements/stream",
+        headers=headers,
+        json={
+            "title": "直播运营 Agent",
+            "initialMessage": "我想做一个直播运营 Agent，帮我整理商品脚本和观众问题。",
+        },
+    ) as response:
+        assert response.status_code == 200
+        body = await response.aread()
+
+    events = parse_sse_events(body.decode())
+    token_events = [payload for event, payload in events if event == "token"]
+    detail_events = [payload for event, payload in events if event == "detail"]
+    assert token_events
+    assert "".join(item["content"] for item in token_events)
+    assert detail_events
+    created = detail_events[-1]
+    assert created["id"]
+    assert created["messages"][-1]["role"] == "assistant"
+    assert created["messages"][-1]["content"]
+
+    async with api_client.stream(
+        "POST",
+        f"/api/v1/requirements/{created['id']}/messages/stream",
+        headers=headers,
+        json={"content": "脚本要按美妆类目，不能自动承诺库存和价格。"},
+    ) as response:
+        assert response.status_code == 200
+        message_body = await response.aread()
+
+    message_events = parse_sse_events(message_body.decode())
+    message_details = [payload for event, payload in message_events if event == "detail"]
+    assert message_details[-1]["id"] == created["id"]
+    assert len(message_details[-1]["messages"]) >= 4
 
 
 async def test_requirement_chat_uses_saved_ai_model_config(

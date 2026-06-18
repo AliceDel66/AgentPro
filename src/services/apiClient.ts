@@ -99,6 +99,23 @@ async function authedFetch(path: string, init: { method: string; body?: string }
   return response;
 }
 
+async function authedStreamFetch(path: string, body: string): Promise<Response> {
+  const send = () =>
+    fetch(`${apiBaseUrl}${path}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body
+    });
+
+  const response = await send();
+  if (response.status === 401 && !path.startsWith("/auth/")) {
+    if (await ensureRefreshed()) {
+      return send();
+    }
+  }
+  return response;
+}
+
 async function readJsonPayload(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text) return null;
@@ -172,6 +189,90 @@ export async function apiPost<TBody, TResponse>(path: string, body: TBody, fallb
 
   const response = await authedFetch(path, { method: "POST", body: JSON.stringify(body) });
   return parseApiResponse<TResponse>(response);
+}
+
+interface StreamHandlers<TResponse> {
+  onToken?: (token: string) => void;
+  onEvent?: (event: string, payload: unknown) => void;
+  isFinalEvent?: (event: string, payload: unknown) => payload is TResponse;
+}
+
+function parseSseBlock<TResponse>(block: string, handlers: StreamHandlers<TResponse>): TResponse | null {
+  const lines = block.split(/\r?\n/);
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+  if (!dataLines.length) return null;
+
+  const payload = JSON.parse(dataLines.join("\n")) as unknown;
+  handlers.onEvent?.(event, payload);
+  if (event === "token" && payload && typeof payload === "object" && "content" in payload) {
+    handlers.onToken?.(String(payload.content ?? ""));
+  }
+  if (event === "error") {
+    throw new Error(extractErrorMessage(payload, "Stream request failed"));
+  }
+  if (handlers.isFinalEvent?.(event, payload)) {
+    return payload;
+  }
+  if (event === "detail") {
+    return payload as TResponse;
+  }
+  return null;
+}
+
+export async function apiPostStream<TBody, TResponse>(
+  path: string,
+  body: TBody,
+  fallback: TResponse,
+  handlers: StreamHandlers<TResponse> = {}
+): Promise<ApiResult<TResponse>> {
+  if (useMockApi) {
+    return { ok: true, data: fallback, message: "mock fallback" };
+  }
+
+  const response = await authedStreamFetch(path, JSON.stringify(body));
+  if (!response.ok) {
+    const payload = await readJsonPayload(response);
+    throw new Error(extractErrorMessage(payload, `Request failed: ${response.status}`));
+  }
+  if (!response.body) {
+    throw new Error("Stream response body is empty");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalPayload: TResponse | null = null;
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const block = buffer.slice(0, boundary).trim();
+      buffer = buffer.slice(boundary + 2);
+      if (block) {
+        finalPayload = parseSseBlock(block, handlers) ?? finalPayload;
+      }
+      boundary = buffer.indexOf("\n\n");
+    }
+    if (done) break;
+  }
+
+  if (buffer.trim()) {
+    finalPayload = parseSseBlock(buffer.trim(), handlers) ?? finalPayload;
+  }
+  if (!finalPayload) {
+    throw new Error("Stream request did not return final detail");
+  }
+  return { ok: true, data: finalPayload };
 }
 
 export async function apiPut<TBody, TResponse>(path: string, body: TBody, fallback: TResponse): Promise<ApiResult<TResponse>> {

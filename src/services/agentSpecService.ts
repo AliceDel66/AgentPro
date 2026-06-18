@@ -1,5 +1,5 @@
 import { requirementLibraryRows } from "../lib/mockData";
-import { apiGet, apiPost } from "./apiClient";
+import { apiGet, apiPost, apiPostStream } from "./apiClient";
 import type { AgentRequirement, AgentSpecDraft, RequirementActionResult, RequirementDetail } from "./types";
 
 const mockRequirements: AgentRequirement[] = requirementLibraryRows.map((row, index) => ({
@@ -45,6 +45,31 @@ export function saveRequirementDraft(payload: Record<string, unknown>) {
   });
 }
 
+function requirementDraftFallback(payload: Record<string, unknown>): RequirementDetail {
+  return {
+    id: "req_mock_001",
+    title: String(payload.title ?? "未命名需求"),
+    status: "interviewing",
+    maturity: 45,
+    route: "chat",
+    summary: String(payload.initialMessage ?? ""),
+    messages: [],
+    followupQuestions: [],
+    decisions: [],
+    safetyReview: {},
+    graphRunId: "graph_mock_001"
+  };
+}
+
+export function streamRequirementDraft(payload: Record<string, unknown>, onToken: (token: string) => void) {
+  return apiPostStream<Record<string, unknown>, RequirementDetail>(
+    "/requirements/stream",
+    payload,
+    requirementDraftFallback(payload),
+    { onToken }
+  );
+}
+
 export function sendRequirementMessage(requirementId: string, content: string) {
   return apiPost(`/requirements/${requirementId}/messages`, { content }, {
     id: requirementId,
@@ -58,6 +83,26 @@ export function sendRequirementMessage(requirementId: string, content: string) {
     decisions: [],
     safetyReview: {}
   } satisfies RequirementDetail);
+}
+
+export function streamRequirementMessage(requirementId: string, content: string, onToken: (token: string) => void) {
+  return apiPostStream(
+    `/requirements/${requirementId}/messages/stream`,
+    { content },
+    {
+      id: requirementId,
+      title: "需求访谈",
+      status: "interviewing",
+      maturity: 55,
+      route: "chat",
+      summary: content,
+      messages: [],
+      followupQuestions: [],
+      decisions: [],
+      safetyReview: {}
+    } satisfies RequirementDetail,
+    { onToken }
+  );
 }
 
 export function confirmRequirementFollowups(requirementId: string, decisions: Array<Record<string, unknown>>) {

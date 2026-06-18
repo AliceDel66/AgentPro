@@ -5,7 +5,7 @@ import { LoadingState } from "../../components/common/LoadingState";
 import { Spinner } from "../../components/common/Spinner";
 import { TypingIndicator } from "../../components/common/TypingIndicator";
 import { TypewriterText } from "../../components/common/Typewriter";
-import { getRequirementDetail, saveRequirementDraft, sendRequirementMessage } from "../../services/agentSpecService";
+import { getRequirementDetail, streamRequirementDraft, streamRequirementMessage } from "../../services/agentSpecService";
 import type { RequirementDetail } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -30,6 +30,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [streamingText, setStreamingText] = useState("");
   const [animateMessageId, setAnimateMessageId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -81,7 +82,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
   // Keep the conversation pinned to the latest message while loading / thinking.
   useEffect(() => {
     scrollToBottom();
-  }, [detail?.messages.length, sending, scrollToBottom]);
+  }, [detail?.messages.length, sending, scrollToBottom, streamingText]);
 
   const handleSend = async () => {
     const content = draft.trim();
@@ -89,20 +90,22 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
 
     setSending(true);
     setPendingMessage(content);
+    setStreamingText("");
     setDraft("");
     setErrorMessage(null);
     try {
+      const handleToken = (token: string) => {
+        setStreamingText((current) => `${current}${token}`);
+      };
       const result = activeRequirementId
-        ? await sendRequirementMessage(activeRequirementId, content)
-        : await saveRequirementDraft({
+        ? await streamRequirementMessage(activeRequirementId, content, handleToken)
+        : await streamRequirementDraft({
             title: titleFromMessage(content),
             initialMessage: content
-          });
+          }, handleToken);
       setDetail(result.data);
       setActiveRequirementId(result.data.id);
-      // Type out only the newest assistant reply.
-      const assistantMessages = result.data.messages.filter((message) => message.role === "assistant");
-      setAnimateMessageId(assistantMessages[assistantMessages.length - 1]?.id ?? null);
+      setAnimateMessageId(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : "发送需求失败";
       setErrorMessage(message);
@@ -110,6 +113,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     } finally {
       setSending(false);
       setPendingMessage(null);
+      setStreamingText("");
     }
   };
 
@@ -152,8 +156,15 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
               <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-agent-ink text-agent-cyan">
                 <Bot size={17} />
               </div>
-              <div className="flex items-center rounded-[4px_16px_16px_16px] border border-agent-border bg-white px-5 py-4 shadow-[0_1px_4px_rgba(11,18,32,0.04)]">
-                <TypingIndicator label="正在思考" />
+              <div className="max-w-[560px] whitespace-pre-line rounded-[4px_16px_16px_16px] border border-agent-border bg-white px-5 py-4 text-sm leading-8 text-agent-secondary shadow-[0_1px_4px_rgba(11,18,32,0.04)]">
+                {streamingText ? (
+                  <>
+                    {streamingText}
+                    <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-agent-caret bg-agent-primary align-middle" />
+                  </>
+                ) : (
+                  <TypingIndicator label="正在思考" />
+                )}
               </div>
             </div>
           ) : null}

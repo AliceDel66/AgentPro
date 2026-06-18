@@ -419,3 +419,31 @@
 - Commit：
   - 哈希：待提交
   - 信息：落地真实自动评审
+
+### 16. P2 需求对话 token 级流式
+- 状态：已完成
+- 完成功能：
+  - 新增 OpenAI-compatible 流式调用封装，向上游模型发送 `stream=true`
+  - 新增需求访谈流式系统提示词，专门生成用户可读的中文反问回复
+  - 新增 `/api/v1/requirements/stream`，创建需求后通过 SSE 持续返回 token
+  - 新增 `/api/v1/requirements/{id}/messages/stream`，继续对话时通过 SSE 返回 token
+  - SSE 事件包含 `token` 与最终 `detail`，最终 `detail` 使用持久化后的 RequirementDetail
+  - 模型未配置或流式失败时，自动使用本地 RequirementGraph 按小块兜底输出
+  - 流式回复完成后仍写入 `conversation_messages`、`agent_graph_runs.state_snapshot`、需求摘要与成熟度
+  - 新增流式接口回归测试，覆盖新建需求流和继续消息流
+- 相关文件：
+  - backend/app/modules/requirements/ai_service.py
+  - backend/app/modules/requirements/router.py
+  - backend/tests/test_requirements.py
+  - docs/AgentPro后续开发计划.md
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_requirements.py
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/requirements backend/tests/test_requirements.py
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：实现需求对话 token 级流式

@@ -81,7 +81,7 @@
 - [x] 「合并优点」按钮落地（当前为占位）。✅ 已新增 `/reviews/{id}/merge` 和前端按钮调用，状态进入 `merge_planned` 并写入审计日志。
 
 ### 5.3 流式体验
-- [ ] 对话改为 token 级流式（后端 SSE/分块透传上游模型流，前端 `TypewriterText` 直接消费真实流而非整段回填）。
+- [x] 对话改为 token 级流式（后端 SSE/分块透传上游模型流，前端 `TypewriterText` 直接消费真实流而非整段回填）。✅ 已新增 `/requirements/stream` 与 `/requirements/{id}/messages/stream`，后端优先透传 OpenAI-compatible `stream=true` token，失败或未配置模型时按本地 RequirementGraph 分块兜底；前端通过 fetch streaming 消费 token 并在最终 `detail` 事件回填持久化会话。
 - [ ] 监控页 SSE 改造（对应 L1）：真正实时推送 worker 事件，解决 `EventSource` 无法带鉴权头的问题（query 一次性票据或 fetch streaming）。
 
 **验收**：从需求 → AgentSpec → 真实开发 → 真实评审 → 采纳的端到端链路可在真实模型与引擎上跑通。

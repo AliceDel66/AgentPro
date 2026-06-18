@@ -578,3 +578,32 @@
 - Commit：
   - 哈希：待提交
   - 信息：落地真实自动评审
+
+### 23. P2 需求对话 token 级流式
+- 状态：已完成
+- 完成功能：
+  - 新增前端 `apiPostStream`，基于 fetch reader 解析 SSE，复用现有 Bearer Token 与 refresh token 逻辑
+  - 新增 `streamRequirementDraft`，创建需求时消费后端 `/requirements/stream`
+  - 新增 `streamRequirementMessage`，继续对话时消费后端 `/requirements/{id}/messages/stream`
+  - 需求访谈页发送后立即展示用户临时气泡，并把后端 token 实时追加到助手临时气泡
+  - 最终 `detail` 事件返回后，用后端持久化消息替换临时流式内容，避免前端与数据库状态漂移
+  - 保留旧 `saveRequirementDraft` 与 `sendRequirementMessage` 接口，其他页面和旧调用仍兼容
+- 相关文件：
+  - src/services/apiClient.ts
+  - src/services/agentSpecService.ts
+  - src/pages/workspace/ChatPage.tsx
+  - backend/app/modules/requirements/ai_service.py
+  - backend/app/modules/requirements/router.py
+  - backend/tests/test_requirements.py
+  - docs/AgentPro后续开发计划.md
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_requirements.py
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/requirements backend/tests/test_requirements.py
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：实现需求对话 token 级流式
