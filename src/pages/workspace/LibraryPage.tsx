@@ -1,15 +1,56 @@
+import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
+import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
-import { libraryFilters, requirementLibraryRows } from "../../lib/mockData";
-import type { Navigate } from "../../types";
+import { listRequirements } from "../../services/agentSpecService";
+import type { AgentRequirement } from "../../services/types";
+import type { AppRoute, Navigate } from "../../types";
 
 interface LibraryPageProps {
   navigate: Navigate;
+  setActiveRequirementId: (requirementId: string | null) => void;
 }
 
 const columns = "grid-cols-[2.2fr_100px_100px_80px_120px_80px]";
 
-export function LibraryPage({ navigate }: LibraryPageProps) {
+function statusMeta(status: string): { label: string; tone: "blue" | "gray" | "cyan" | "purple" | "green"; route: AppRoute } {
+  const meta: Record<string, { label: string; tone: "blue" | "gray" | "cyan" | "purple" | "green"; route: AppRoute }> = {
+    interviewing: { label: "访谈中", tone: "gray", route: "chat" },
+    ready_for_spec: { label: "可生成", tone: "cyan", route: "spec" },
+    spec_draft: { label: "草案中", tone: "blue", route: "spec" },
+    approved: { label: "已审批", tone: "green", route: "dispatch" },
+    archived: { label: "已归档", tone: "green", route: "chat" }
+  };
+  return meta[status] ?? { label: status, tone: "gray", route: "chat" };
+}
+
+export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPageProps) {
+  const [requirements, setRequirements] = useState<AgentRequirement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRequirements() {
+      setLoading(true);
+      setErrorMessage(null);
+      try {
+        const result = await listRequirements();
+        if (!cancelled) setRequirements(result.data);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "读取需求库失败";
+        if (!cancelled) setErrorMessage(message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadRequirements();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="flex-1 overflow-y-auto bg-agent-bg px-9 py-8 pb-24">
       <div className="mb-7 flex items-center justify-between">
@@ -17,14 +58,21 @@ export function LibraryPage({ navigate }: LibraryPageProps) {
           <h1 className="m-0 text-[22px] font-bold text-agent-ink">需求库</h1>
           <div className="mt-1 text-[13px] text-agent-muted">管理所有 Agent 需求项目</div>
         </div>
-        <button className="inline-flex items-center gap-2 rounded-[10px] bg-agent-primary px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-agent-primaryHover" type="button" onClick={() => navigate("chat")}>
+        <button
+          className="inline-flex items-center gap-2 rounded-[10px] bg-agent-primary px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-agent-primaryHover"
+          type="button"
+          onClick={() => {
+            setActiveRequirementId(null);
+            navigate("chat");
+          }}
+        >
           <Plus size={16} strokeWidth={2.5} />
           新建需求
         </button>
       </div>
 
       <div className="mb-[22px] flex flex-wrap gap-2">
-        {libraryFilters.map((filter, index) => (
+        {["全部", "访谈中", "草案中", "已审批", "已归档"].map((filter, index) => (
           <button
             className={`rounded-[10px] px-[18px] py-[7px] text-[13px] font-medium ${
               index === 0 ? "bg-agent-primary text-white" : "border border-agent-border bg-white text-agent-muted hover:border-agent-primary hover:text-agent-primary"
@@ -37,6 +85,8 @@ export function LibraryPage({ navigate }: LibraryPageProps) {
         ))}
       </div>
 
+      {errorMessage ? <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
+
       <div className="overflow-hidden rounded-xl border border-agent-border bg-white">
         <div className={`grid ${columns} border-b border-agent-divider bg-[#F8FAFC] px-6 py-[13px]`}>
           {["需求名称", "状态", "最近更新", "成熟度", "开发方式", "评审分"].map((column) => (
@@ -45,23 +95,31 @@ export function LibraryPage({ navigate }: LibraryPageProps) {
             </span>
           ))}
         </div>
-        {requirementLibraryRows.map((row, index) => (
-          <button
-            className={`grid w-full ${columns} items-center px-6 py-4 text-left hover:bg-[#FAFCFE] ${index === requirementLibraryRows.length - 1 ? "" : "border-b border-agent-divider"}`}
-            key={row.title}
-            type="button"
-            onClick={() => row.route && navigate(row.route)}
-          >
-            <span className="text-[13px] font-medium text-agent-ink">{row.title}</span>
-            <span>
-              <StatusChip tone={row.tone}>{row.status}</StatusChip>
-            </span>
-            <span className="text-xs text-agent-muted">{row.updated}</span>
-            <span className={`text-[13px] font-semibold ${row.maturityTone ?? "text-agent-primary"}`}>{row.maturity}</span>
-            <span className="text-xs text-agent-muted">{row.method}</span>
-            <span className={`text-[13px] font-medium ${row.score === "—" ? "text-agent-subtle" : row.status === "已归档" ? "text-agent-success" : "text-agent-ink"}`}>{row.score}</span>
-          </button>
-        ))}
+        {loading ? <LoadingState className="px-6 py-8" label="正在读取需求库..." /> : null}
+        {!loading && !requirements.length ? <div className="px-6 py-8 text-sm text-agent-muted">暂无需求，点击“新建需求”开始。</div> : null}
+        {requirements.map((row, index) => {
+          const meta = statusMeta(row.status);
+          return (
+            <button
+              className={`grid w-full ${columns} items-center px-6 py-4 text-left hover:bg-[#FAFCFE] ${index === requirements.length - 1 ? "" : "border-b border-agent-divider"}`}
+              key={row.id}
+              type="button"
+              onClick={() => {
+                setActiveRequirementId(row.id);
+                navigate(row.route ?? meta.route);
+              }}
+            >
+              <span className="truncate text-[13px] font-medium text-agent-ink">{row.title}</span>
+              <span>
+                <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+              </span>
+              <span className="text-xs text-agent-muted">刚刚</span>
+              <span className="text-[13px] font-semibold text-agent-primary">{row.maturity}%</span>
+              <span className="text-xs text-agent-muted">{row.status === "approved" ? "待选择" : "-"}</span>
+              <span className="text-[13px] font-medium text-agent-subtle">-</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

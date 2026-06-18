@@ -41,7 +41,10 @@ const config: Config = {
       },
       animation: {
         "agent-pulse": "agent-pulse 3s ease-in-out infinite",
-        "agent-spin": "agent-spin 1s linear infinite"
+        "agent-spin": "agent-spin 1s linear infinite",
+        "agent-bounce": "agent-bounce 1.2s ease-in-out infinite",
+        "agent-caret": "agent-caret 0.9s step-end infinite",
+        "agent-fade-in": "agent-fade-in 0.28s ease-out both"
       }
     }
   },

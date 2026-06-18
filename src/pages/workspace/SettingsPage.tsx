@@ -1,6 +1,10 @@
+import { useEffect, useState } from "react";
 import { CheckCircle2, Lock, Shield, TriangleAlert } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
+import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
+import { getModelConfig } from "../../services/modelService";
+import type { ModelProviderConfig } from "../../services/types";
 import type { Navigate } from "../../types";
 
 interface SettingsPageProps {
@@ -8,6 +12,31 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ navigate }: SettingsPageProps) {
+  const [modelConfig, setModelConfig] = useState<ModelProviderConfig | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const [loadingModel, setLoadingModel] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadModelConfig() {
+      setLoadingModel(true);
+      try {
+        const result = await getModelConfig();
+        if (!cancelled) setModelConfig(result.data);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "读取模型配置失败";
+        if (!cancelled) setModelError(message);
+      } finally {
+        if (!cancelled) setLoadingModel(false);
+      }
+    }
+
+    void loadModelConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="flex-1 overflow-y-auto bg-agent-bg px-9 py-8 pb-24">
       <div className="mx-auto max-w-[780px]">
@@ -31,21 +60,27 @@ export function SettingsPage({ navigate }: SettingsPageProps) {
         </Card>
 
         <Card title="模型配置">
+          {loadingModel ? <LoadingState className="py-1" label="正在读取模型配置..." /> : (
           <div className="grid grid-cols-[120px_1fr] items-center gap-x-5 gap-y-3.5 text-[13px]">
             <Label>Provider</Label>
-            <Value>sub2api</Value>
+            <Value>{modelConfig?.provider ?? "未配置"}</Value>
             <Label>Base URL</Label>
-            <Value mono>https://api.sub2api.com/v1</Value>
+            <Value mono>{modelConfig?.baseUrl ?? "-"}</Value>
             <Label>API Key</Label>
-            <Value mono>已安全保存，界面不显示完整密钥</Value>
+            <Value mono>{modelConfig?.secretSaved ? "已安全保存，界面不显示完整密钥" : "未保存"}</Value>
             <Label>当前模型</Label>
-            <Value>claude-sonnet-4-20250514</Value>
+            <Value>{modelConfig?.model ?? "-"}</Value>
             <Label>连接状态</Label>
-            <span className="flex items-center gap-1.5 font-medium text-agent-success">
-              <CheckCircle2 size={14} />
-              连接正常
-            </span>
+            {modelError ? (
+              <span className="font-medium text-agent-danger">{modelError}</span>
+            ) : (
+              <span className="flex items-center gap-1.5 font-medium text-agent-success">
+                <CheckCircle2 size={14} />
+                {modelConfig?.secretSaved ? "已配置" : "待配置"}
+              </span>
+            )}
           </div>
+          )}
           <div className="mt-[18px]">
             <AppButton type="button" variant="secondary" onClick={() => navigate("setup")}>
               修改配置

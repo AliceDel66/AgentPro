@@ -67,6 +67,50 @@ select {
   }
 }
 
+@keyframes agent-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes agent-caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes agent-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-agent-pulse,
+  .animate-agent-spin,
+  .animate-agent-bounce,
+  .animate-agent-caret,
+  .animate-agent-fade-in {
+    animation: none !important;
+  }
+}
+
 .agent-input {
   width: 100%;
   border: 1px solid #d9e6f5;

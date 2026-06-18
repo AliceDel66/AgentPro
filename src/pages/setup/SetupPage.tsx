@@ -334,7 +334,7 @@ export function SetupPage({ navigate }: SetupPageProps) {
                     ))}
                   </select>
                 </label>
-                <AppButton className="h-[43px] px-5" disabled={fetchingModels || loadingConfig} type="button" variant="secondary" onClick={handleFetchModels}>
+                <AppButton className="h-[43px] px-5" disabled={fetchingModels || loadingConfig} loading={fetchingModels} type="button" variant="secondary" onClick={handleFetchModels}>
                   {fetchingModels ? "获取中..." : "获取模型"}
                 </AppButton>
               </div>
@@ -353,9 +353,9 @@ export function SetupPage({ navigate }: SetupPageProps) {
               <AppButton disabled={saving} type="button" variant="ghost" onClick={() => navigate("login")}>
                 稍后配置
               </AppButton>
-              <AppButton className="inline-flex items-center gap-2" disabled={saving || !canSubmit} type="button" onClick={() => void handleSave("chat")}>
+              <AppButton className="inline-flex items-center gap-2" disabled={saving || !canSubmit} loading={saving} type="button" onClick={() => void handleSave("chat")}>
                 {saving ? "保存中..." : "进入工作台"}
-                <ChevronRight size={16} />
+                {saving ? null : <ChevronRight size={16} />}
               </AppButton>
             </div>
           </AppCard>

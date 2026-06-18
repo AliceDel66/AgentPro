@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Spinner } from "./Spinner";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -11,15 +12,20 @@ const variants: Record<Variant, string> = {
 
 interface AppButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
+  /** When true, shows a spinner and blocks clicks. */
+  loading?: boolean;
   children: ReactNode;
 }
 
-export function AppButton({ variant = "primary", className = "", children, ...props }: AppButtonProps) {
+export function AppButton({ variant = "primary", className = "", loading = false, disabled, children, ...props }: AppButtonProps) {
   return (
     <button
-      className={`rounded-[10px] border px-5 py-3 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-[10px] border px-5 py-3 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${variants[variant]} ${className}`}
+      disabled={disabled || loading}
+      aria-busy={loading}
       {...props}
     >
+      {loading ? <Spinner size={15} className={variant === "secondary" || variant === "ghost" ? "text-current" : "text-white"} /> : null}
       {children}
     </button>
   );

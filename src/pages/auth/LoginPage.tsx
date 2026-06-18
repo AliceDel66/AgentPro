@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AuthLayout } from "../../components/layout/AuthLayout";
+import { Spinner } from "../../components/common/Spinner";
 import { TextField } from "../../components/common/TextField";
 import { loginWithPassword, persistAuthSession } from "../../services/authService";
 import { getModelConfig } from "../../services/modelService";
@@ -58,11 +59,13 @@ export function LoginPage({ navigate }: LoginPageProps) {
           />
           {errorMessage ? <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
           <button
-            className="mt-1 rounded-lg bg-agent-primary px-5 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-agent-primaryHover"
+            className="mt-1 inline-flex items-center justify-center gap-2 rounded-lg bg-agent-primary px-5 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
             disabled={submitting}
+            aria-busy={submitting}
             onClick={() => void handleLogin()}
           >
+            {submitting ? <Spinner size={16} className="text-white" /> : null}
             {submitting ? "登录中..." : "登 录"}
           </button>
         </div>
