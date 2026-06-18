@@ -64,6 +64,10 @@ export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setA
 
   const handleRegenerate = async (report: ReviewReport) => {
     if (action) return;
+    if (!isCompleteReport(report)) {
+      await handleOptimize(report);
+      return;
+    }
     setAction({ type: "regenerate", id: report.id });
     setErrorMessage(null);
     try {
@@ -181,6 +185,7 @@ function ReportCard({
   const regenerating = action?.type === "regenerate" && action.id === report.id;
   const optimizing = action?.type === "optimize" && action.id === report.id;
   const completeness = reportCompleteness(report);
+  const complete = isCompleteReport(report);
   const hasActionPlan = Boolean(report.actionPlan?.length);
 
   return (
@@ -250,9 +255,9 @@ function ReportCard({
           <ClipboardList size={16} />
           查看方案
         </AppButton>
-        <AppButton disabled={Boolean(action)} loading={regenerating} type="button" variant="secondary" onClick={onRegenerate}>
+        <AppButton disabled={Boolean(action)} loading={regenerating || (!complete && optimizing)} type="button" variant="secondary" onClick={onRegenerate}>
           <RefreshCcw size={16} />
-          {regenerating ? "生成中..." : "重新生成"}
+          {regenerating || (!complete && optimizing) ? "生成中..." : complete ? "重新生成" : "补全报告"}
         </AppButton>
         <AppButton disabled={Boolean(action) || optimizationRunning} loading={optimizing} type="button" onClick={onOptimize}>
           <WandSparkles size={16} />
@@ -269,6 +274,10 @@ function reportCompleteness(report: ReviewReport) {
     { label: "证据链", done: Boolean(report.evidenceSources?.length) },
     { label: "优化方案", done: Boolean(report.actionPlan?.length) }
   ];
+}
+
+function isCompleteReport(report: ReviewReport) {
+  return Boolean(report.scoreBreakdown?.length && report.evidenceSources?.length && report.actionPlan?.length);
 }
 
 function reviewStatusLabel(status?: string) {

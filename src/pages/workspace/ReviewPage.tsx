@@ -56,6 +56,7 @@ export function ReviewPage({
   const [merging, setMerging] = useState(false);
   const [creating, setCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [runnerMessage, setRunnerMessage] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const acting = action !== null;
 
@@ -102,6 +103,18 @@ export function ReviewPage({
 
   const localArtifactPath = useMemo(() => firstArtifactPath(report), [report]);
   const isLegacyReport = Boolean(report) && (!report?.scoreBreakdown?.length || !report?.actionPlan?.length);
+
+  const refreshLatestReviewForJob = async (jobId: string, specId?: string | null) => {
+    const latest = await getLatestReview({ jobId, specId: specId ?? undefined });
+    if (latest.data) {
+      setReport(latest.data);
+      setActiveReviewId(latest.data.id);
+      setActiveReviewTab("details");
+      setRunnerMessage("本机 Runner 已完成，完整评审报告已刷新。");
+    } else {
+      setRunnerMessage("本机 Runner 已完成，但暂未读取到新评审报告，请稍后刷新报告档案。");
+    }
+  };
 
   const handleGenerate = async (isRegenerate: boolean) => {
     if (creating || acting) return;
@@ -179,25 +192,66 @@ export function ReviewPage({
     if (!report || acting) return;
     setAction("optimize");
     setErrorMessage(null);
+    setRunnerMessage(null);
     try {
       const result = await optimizeFromReviewReport(report.id);
       setReport(result.data);
       if (result.data.optimizationJob) {
         setActiveJobId(result.data.optimizationJob.id);
         setActiveJobStatus(result.data.optimizationJob.status);
+        setRunnerMessage("已创建本机 Runner 优化任务，完成后会自动生成新的评审报告。");
         void executeRunnerJobOnDesktop(result.data.optimizationJob.id, {
           createReviewOnComplete: true,
           onStatus: setActiveJobStatus
-        }).catch((error) => {
-          console.error("[AgentPro] 详情页优化 Runner 执行失败", error);
-          setActiveJobStatus("blocked");
-        });
+        })
+          .then(() => refreshLatestReviewForJob(result.data.optimizationJob!.id, result.data.specId))
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : "本机 Runner 执行失败";
+            console.error("[AgentPro] 详情页优化 Runner 执行失败", error);
+            setActiveJobStatus("blocked");
+            setErrorMessage(message);
+          });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "创建优化任务失败";
       setErrorMessage(message);
     } finally {
       setAction(null);
+    }
+  };
+
+  const handleCompleteReportWithDesktopRunner = async () => {
+    if (!report || acting || creating) return;
+    setCreating(true);
+    setErrorMessage(null);
+    setRunnerMessage(null);
+    try {
+      const result = await optimizeFromReviewReport(report.id);
+      setReport(result.data);
+      if (!result.data.optimizationJob) {
+        setErrorMessage("后端未返回可执行的本机 Runner 任务。");
+        return;
+      }
+      const job = result.data.optimizationJob;
+      setActiveJobId(job.id);
+      setActiveJobStatus(job.status);
+      setRunnerMessage("已创建本机 Runner 补全任务，正在调用客户本机 Codex/Claude Code 生成完整评审报告。");
+      void executeRunnerJobOnDesktop(job.id, {
+        createReviewOnComplete: true,
+        onStatus: setActiveJobStatus
+      })
+        .then(() => refreshLatestReviewForJob(job.id, result.data.specId))
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : "本机 Runner 补全报告失败";
+          console.error("[AgentPro] 完整报告本机 Runner 执行失败", error);
+          setActiveJobStatus("blocked");
+          setErrorMessage(message);
+        });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "创建完整报告任务失败";
+      setErrorMessage(message);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -256,6 +310,7 @@ export function ReviewPage({
         </div>
 
         {errorMessage ? <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
+        {runnerMessage ? <div className="mb-4 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-agent-primary">{runnerMessage}</div> : null}
 
         {!report && !loading ? (
           <div className="rounded-xl border border-dashed border-agent-border bg-white px-6 py-12 text-center">
@@ -271,7 +326,7 @@ export function ReviewPage({
         {report ? (
           <>
             <ReportMeta report={report} />
-            {isLegacyReport ? <LegacyNotice onRegenerate={() => void handleGenerate(true)} creating={creating} /> : null}
+            {isLegacyReport ? <LegacyNotice onRegenerate={() => void handleCompleteReportWithDesktopRunner()} creating={creating} /> : null}
             <ArtifactLocationCard
               path={localArtifactPath}
               copied={Boolean(copiedPath)}
@@ -344,10 +399,10 @@ function LegacyNotice({ creating, onRegenerate }: { creating: boolean; onRegener
     <div className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
       <div className="flex items-start gap-3 text-[13px] leading-6 text-orange-700">
         <AlertTriangle className="mt-0.5 shrink-0" size={16} />
-        该报告由旧版本生成，缺少完整详情字段。建议重新生成完整报告，以获得证据链和优化方案。
+        该报告由旧版本生成，缺少完整详情字段。请调用本机 Codex/Claude Code 补全开发证据并生成完整报告。
       </div>
       <AppButton loading={creating} type="button" variant="secondary" onClick={onRegenerate}>
-        重新生成完整报告
+        {creating ? "创建中..." : "重新生成完整报告"}
       </AppButton>
     </div>
   );

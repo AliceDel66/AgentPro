@@ -694,3 +694,24 @@
 - Commit：
   - 哈希：本提交
   - 信息：完善评审报告详情与优化方案页
+
+### 26. 需求库开发与评审状态同步
+- 状态：已完成
+- 完成功能：
+  - `/api/v1/requirements` 列表新增 `workflowStatus`、`latestSpecId`、`latestJob`、`latestReview`
+  - 需求库可从后端直接读取最新 AgentSpec、DevJob、ReviewReport 摘要，避免开发完成后仍显示“去开发”
+  - `workflowStatus` 根据最新评审、开发任务终态、开发中或阻塞状态派生为 `reviewed/developed/developing/dev_blocked`
+  - 新增回归测试覆盖需求列表同步最新开发任务、评审报告、开发方式和评审分
+- 相关文件：
+  - backend/app/modules/requirements/router.py
+  - backend/app/modules/requirements/schemas.py
+  - backend/tests/test_requirements.py
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_requirements.py::test_requirement_list_includes_latest_workflow_summaries backend/tests/test_review.py::test_review_report_accept_and_rework（2 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+- Commit：
+  - 哈希：本提交
+  - 信息：修复评审补全与需求库状态同步

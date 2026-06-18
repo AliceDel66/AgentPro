@@ -488,3 +488,63 @@ async def test_get_spec_returns_latest_generated_version(api_client: AsyncClient
     )
     assert latest.status_code == 200
     assert latest.json()["data"]["version"] == second.json()["data"]["version"]
+
+
+async def test_requirement_list_includes_latest_workflow_summaries(
+    api_client: AsyncClient,
+) -> None:
+    headers = await auth_headers(api_client)
+    create = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={"title": "同步状态需求", "initialMessage": "做一个招聘筛选 Agent。"},
+    )
+    requirement_id = create.json()["data"]["id"]
+    spec_response = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/spec/generate",
+        headers=headers,
+    )
+    spec_id = spec_response.json()["data"]["id"]
+    job_response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "codex", "specId": spec_id},
+    )
+    job_id = job_response.json()["data"]["id"]
+    await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/events",
+        headers=headers,
+        json={
+            "phase": "desktop.runner.complete",
+            "message": "Codex CLI 已完成开发。",
+            "progress": 100,
+            "status": "completed",
+        },
+    )
+    await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/artifacts",
+        headers=headers,
+        json={
+            "engine": "codex",
+            "kind": "run-log",
+            "summary": "codex completed",
+            "payload": {"stdout": "pytest passed", "exitCode": 0},
+        },
+    )
+    review_response = await api_client.post(
+        "/api/v1/reviews",
+        headers=headers,
+        json={"jobId": job_id},
+    )
+    review = review_response.json()["data"]
+
+    list_response = await api_client.get("/api/v1/requirements", headers=headers)
+    assert list_response.status_code == 200
+    item = next(row for row in list_response.json()["data"] if row["id"] == requirement_id)
+    assert item["workflowStatus"] == "reviewed"
+    assert item["latestSpecId"] == spec_id
+    assert item["latestJob"]["id"] == job_id
+    assert item["latestJob"]["status"] == "completed"
+    assert item["latestJob"]["strategy"] == "codex"
+    assert item["latestReview"]["id"] == review["id"]
+    assert item["latestReview"]["score"] == review["score"]

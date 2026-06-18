@@ -837,3 +837,28 @@
 - Commit：
   - 哈希：本提交
   - 信息：完善评审报告详情与优化方案页
+
+### 33. 评审补全与需求库状态同步
+- 状态：已完成
+- 完成功能：
+  - 旧版评审报告的“重新生成完整报告”改为创建本机 Runner 补全任务，并调用客户本机 Codex / Claude Code 执行
+  - 评审详情页在创建补全/优化任务后即时显示进行中反馈，Runner 完成后自动刷新最新完整报告
+  - 报告档案中不完整报告的“补全报告”复用本机 Runner 路径，完整报告仍支持普通重新生成
+  - 需求库行展示后端同步的开发状态、开发方式、评审分，并把下一步切换为“看进度 / 生成评审 / 看评审 / 查看阻塞”
+  - 点击需求行或下一步操作时同步 `activeRequirementId / activeSpecId / activeJobId / activeReviewId`，避免 workflow guard 弹回需求库
+- 相关文件：
+  - src/App.tsx
+  - src/lib/workflow.ts
+  - src/pages/workspace/LibraryPage.tsx
+  - src/pages/workspace/ReportsPage.tsx
+  - src/pages/workspace/ReviewPage.tsx
+  - src/services/types.ts
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_requirements.py::test_requirement_list_includes_latest_workflow_summaries backend/tests/test_review.py::test_review_report_accept_and_rework（2 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+- Commit：
+  - 哈希：本提交
+  - 信息：修复评审补全与需求库状态同步

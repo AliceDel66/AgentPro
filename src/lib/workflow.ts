@@ -1,4 +1,5 @@
 import type { AppRoute } from "../types";
+import type { AgentRequirement } from "../services/types";
 
 export interface WorkflowStep {
   key: string;
@@ -100,4 +101,21 @@ export function nextActionForStatus(status: string): NextAction {
     default:
       return { label: "继续", route: "chat" };
   }
+}
+
+export function nextActionForRequirement(requirement: AgentRequirement): NextAction {
+  if (requirement.latestReview) return { label: "看评审", route: "review" };
+
+  const job = requirement.latestJob;
+  if (job) {
+    if (job.status === "completed" || job.status === "completed_with_warnings") {
+      return { label: "生成评审", route: "review" };
+    }
+    if (job.status === "failed" || job.status === "blocked") {
+      return { label: "查看阻塞", route: "monitor" };
+    }
+    return { label: "看进度", route: "monitor" };
+  }
+
+  return nextActionForStatus(requirement.status);
 }

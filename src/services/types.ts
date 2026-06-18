@@ -47,6 +47,26 @@ export interface AgentRequirement {
   status: string;
   maturity: number;
   route?: AppRoute;
+  workflowStatus?: string | null;
+  latestSpecId?: string | null;
+  latestJob?: RequirementJobSummary | null;
+  latestReview?: RequirementReviewSummary | null;
+}
+
+export interface RequirementJobSummary {
+  id: string;
+  status: string;
+  progress: number;
+  strategy: "codex" | "claude-code" | "parallel" | string;
+  updatedAt: string;
+}
+
+export interface RequirementReviewSummary {
+  id: string;
+  status: string;
+  score: number;
+  recommendedEngine?: "codex" | "claude-code" | string | null;
+  createdAt: string;
 }
 
 export interface RequirementDetail extends AgentRequirement {

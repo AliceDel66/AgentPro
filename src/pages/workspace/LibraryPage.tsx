@@ -3,13 +3,18 @@ import { Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
 import { deleteRequirement, listRequirements, restoreRequirement, trashRequirement } from "../../services/agentSpecService";
-import { nextActionForStatus } from "../../lib/workflow";
+import { nextActionForRequirement } from "../../lib/workflow";
 import type { AgentRequirement } from "../../services/types";
 import type { AppRoute, Navigate } from "../../types";
 
 interface LibraryPageProps {
   navigate: Navigate;
   setActiveRequirementId: (requirementId: string | null) => void;
+  setActiveSpecId: (specId: string | null) => void;
+  setActiveJobId: (jobId: string | null) => void;
+  setActiveJobStatus: (status: string | null) => void;
+  setActiveReviewId: (reviewId: string | null) => void;
+  setActiveReviewTab: (tab: "overview" | "details" | "evidence" | "plan") => void;
 }
 
 const columns = "grid-cols-[minmax(180px,2fr)_92px_92px_72px_104px_64px_138px]";
@@ -20,6 +25,10 @@ function statusMeta(status: string): { label: string; tone: "blue" | "gray" | "c
     ready_for_spec: { label: "可生成", tone: "cyan", route: "spec" },
     spec_draft: { label: "草案中", tone: "blue", route: "spec" },
     approved: { label: "已审批", tone: "green", route: "dispatch" },
+    developing: { label: "开发中", tone: "cyan", route: "monitor" },
+    developed: { label: "待评审", tone: "purple", route: "review" },
+    dev_blocked: { label: "开发阻塞", tone: "red", route: "monitor" },
+    reviewed: { label: "已评审", tone: "green", route: "review" },
     archived: { label: "已归档", tone: "green", route: "chat" },
     trashed: { label: "垃圾篓", tone: "red", route: "library" }
   };
@@ -60,7 +69,15 @@ function matchesFilter(status: string, key: FilterKey): boolean {
   }
 }
 
-export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPageProps) {
+export function LibraryPage({
+  navigate,
+  setActiveRequirementId,
+  setActiveSpecId,
+  setActiveJobId,
+  setActiveJobStatus,
+  setActiveReviewId,
+  setActiveReviewTab
+}: LibraryPageProps) {
   const [requirements, setRequirements] = useState<AgentRequirement[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -68,7 +85,7 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
   const [actionId, setActionId] = useState<string | null>(null);
 
   const filtered = useMemo(
-    () => requirements.filter((row) => matchesFilter(row.status, filter)),
+    () => requirements.filter((row) => matchesFilter(row.workflowStatus ?? row.status, filter)),
     [requirements, filter]
   );
   const activeRequirements = useMemo(
@@ -78,8 +95,8 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
   const counts = useMemo(
     () => ({
       total: activeRequirements.length,
-      todo: activeRequirements.filter((row) => TODO_STATUSES.includes(row.status)).length,
-      approved: activeRequirements.filter((row) => row.status === "approved").length,
+      todo: activeRequirements.filter((row) => TODO_STATUSES.includes(row.workflowStatus ?? row.status)).length,
+      approved: activeRequirements.filter((row) => (row.workflowStatus ?? row.status) === "approved").length,
       archived: activeRequirements.filter((row) => row.status === "archived").length,
       trashed: requirements.filter((row) => row.status === "trashed").length
     }),
@@ -98,6 +115,24 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
           : row
       )
     );
+  }
+
+  function syncWorkflowContext(row: AgentRequirement) {
+    setActiveRequirementId(row.id);
+    setActiveSpecId(row.latestSpecId ?? null);
+    setActiveJobId(row.latestJob?.id ?? null);
+    setActiveJobStatus(row.latestJob?.status ?? null);
+    setActiveReviewId(row.latestReview?.id ?? null);
+    if (row.latestReview) setActiveReviewTab("overview");
+  }
+
+  function developmentMethod(row: AgentRequirement) {
+    if (!row.latestJob?.strategy) return row.status === "approved" ? "待选择" : "-";
+    return engineLabel(row.latestJob.strategy);
+  }
+
+  function reviewScore(row: AgentRequirement) {
+    return row.latestReview ? `${row.latestReview.score}` : "-";
   }
 
   async function handleTrash(row: AgentRequirement) {
@@ -225,14 +260,14 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
           <div className="px-6 py-8 text-sm text-agent-muted">该筛选下暂无需求。</div>
         ) : null}
         {filtered.map((row, index) => {
-          const meta = statusMeta(row.status);
-          const next = nextActionForStatus(row.status);
+          const meta = statusMeta(row.workflowStatus ?? row.status);
+          const next = nextActionForRequirement(row);
           const isTrashed = row.status === "trashed";
           const busy = actionId === row.id;
           const openRow = () => {
             if (isTrashed) return;
-            setActiveRequirementId(row.id);
-            navigate(row.route ?? meta.route);
+            syncWorkflowContext(row);
+            navigate(row.workflowStatus && row.workflowStatus !== row.status ? meta.route : row.route ?? meta.route);
           };
           return (
             <div
@@ -253,8 +288,8 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
               </span>
               <span className="text-xs text-agent-muted">刚刚</span>
               <span className="text-[13px] font-semibold text-agent-primary">{row.maturity}%</span>
-              <span className="text-xs text-agent-muted">{row.status === "approved" ? "待选择" : "-"}</span>
-              <span className="text-[13px] font-medium text-agent-subtle">-</span>
+              <span className="text-xs text-agent-muted">{developmentMethod(row)}</span>
+              <span className="text-[13px] font-medium text-agent-subtle">{reviewScore(row)}</span>
               <span className="flex items-center gap-1.5">
                 {isTrashed ? (
                   <>
@@ -283,7 +318,7 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
                       className="rounded-lg bg-agent-pale px-2.5 py-1.5 text-xs font-semibold text-agent-primary hover:bg-agent-paleHover"
                       type="button"
                       onClick={() => {
-                        setActiveRequirementId(row.id);
+                        syncWorkflowContext(row);
                         navigate(next.route);
                       }}
                     >
@@ -307,6 +342,15 @@ export function LibraryPage({ navigate, setActiveRequirementId }: LibraryPagePro
       </div>
     </div>
   );
+}
+
+function engineLabel(strategy: string) {
+  const labels: Record<string, string> = {
+    codex: "Codex",
+    "claude-code": "Claude Code",
+    parallel: "并行候选"
+  };
+  return labels[strategy] ?? strategy;
 }
 
 function SummaryCard({

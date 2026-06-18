@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import record_audit
@@ -15,8 +15,10 @@ from app.db.models import (
     AgentGraphRun,
     AgentSpec,
     ConversationMessage,
+    DevJob,
     Requirement,
     RequirementDecision,
+    ReviewReport,
     User,
 )
 from app.db.session import get_db_session
@@ -38,8 +40,10 @@ from app.modules.requirements.schemas import (
     RequirementCreate,
     RequirementDeleteResponse,
     RequirementDetail,
+    RequirementJobSummary,
     RequirementListItem,
     RequirementMessageCreate,
+    RequirementReviewSummary,
 )
 
 router = APIRouter(prefix="/requirements")
@@ -221,6 +225,105 @@ async def latest_spec(session: AsyncSession, requirement_id: str) -> AgentSpec |
         .order_by(AgentSpec.version.desc(), AgentSpec.updated_at.desc())
     )
     return result.scalars().first()
+
+
+async def latest_job_for_requirement(
+    session: AsyncSession,
+    user_id: str,
+    requirement: Requirement,
+    spec: AgentSpec | None,
+) -> DevJob | None:
+    filters = [DevJob.user_id == user_id, DevJob.requirement_id == requirement.id]
+    if spec:
+        filters.append(DevJob.spec_id == spec.id)
+    result = await session.execute(
+        select(DevJob)
+        .where(or_(*filters))
+        .order_by(DevJob.updated_at.desc(), DevJob.created_at.desc())
+    )
+    return result.scalars().first()
+
+
+async def latest_review_for_requirement(
+    session: AsyncSession,
+    user_id: str,
+    requirement: Requirement,
+    spec: AgentSpec | None,
+    job: DevJob | None,
+) -> ReviewReport | None:
+    filters = [ReviewReport.user_id == user_id]
+    context_filters = []
+    if job:
+        context_filters.append(ReviewReport.job_id == job.id)
+    if spec:
+        context_filters.append(ReviewReport.spec_id == spec.id)
+    if not context_filters:
+        return None
+
+    result = await session.execute(
+        select(ReviewReport)
+        .where(*filters, or_(*context_filters))
+        .order_by(ReviewReport.created_at.desc())
+    )
+    return result.scalars().first()
+
+
+def workflow_status_for_requirement(
+    requirement: Requirement,
+    job: DevJob | None,
+    review: ReviewReport | None,
+) -> str:
+    if review:
+        return "reviewed"
+    if job:
+        if job.status in {"completed", "completed_with_warnings"}:
+            return "developed"
+        if job.status in {"failed", "blocked"}:
+            return "dev_blocked"
+        if job.status in {"queued", "running"}:
+            return "developing"
+    return requirement.status
+
+
+async def build_list_item(
+    session: AsyncSession,
+    requirement: Requirement,
+    current_user: User,
+) -> RequirementListItem:
+    spec = await latest_spec(session, requirement.id)
+    job = await latest_job_for_requirement(session, current_user.id, requirement, spec)
+    review = await latest_review_for_requirement(session, current_user.id, requirement, spec, job)
+    return RequirementListItem(
+        id=requirement.id,
+        title=requirement.title,
+        status=requirement.status,
+        maturity=requirement.maturity,
+        route="library" if requirement.status == "trashed" else requirement.route or "chat",
+        workflowStatus=workflow_status_for_requirement(requirement, job, review),
+        latestSpecId=spec.id if spec else None,
+        latestJob=(
+            RequirementJobSummary(
+                id=job.id,
+                status=job.status,
+                progress=job.progress,
+                strategy=job.strategy,
+                updatedAt=job.updated_at.isoformat(),
+            )
+            if job
+            else None
+        ),
+        latestReview=(
+            RequirementReviewSummary(
+                id=review.id,
+                status=review.status,
+                score=review.score,
+                recommendedEngine=review.recommended_engine,
+                createdAt=review.created_at.isoformat(),
+            )
+            if review
+            else None
+        ),
+    )
 
 
 async def create_spec_from_requirement(
@@ -426,13 +529,7 @@ async def list_requirements(
     )
     return ok(
         [
-            RequirementListItem(
-                id=requirement.id,
-                title=requirement.title,
-                status=requirement.status,
-                maturity=requirement.maturity,
-                route="library" if requirement.status == "trashed" else requirement.route or "chat",
-            )
+            await build_list_item(session, requirement, current_user)
             for requirement in result.scalars().all()
         ]
     )

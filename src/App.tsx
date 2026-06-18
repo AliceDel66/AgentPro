@@ -101,7 +101,15 @@ export default function App() {
       ) : route === "spec" ? (
         <SpecPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} setActiveSpecId={setActiveSpecId} />
       ) : route === "library" ? (
-        <LibraryPage navigate={guardedNavigate} setActiveRequirementId={setActiveRequirementId} />
+        <LibraryPage
+          navigate={guardedNavigate}
+          setActiveJobId={setActiveJobId}
+          setActiveJobStatus={setActiveJobStatus}
+          setActiveRequirementId={setActiveRequirementId}
+          setActiveReviewId={setActiveReviewId}
+          setActiveReviewTab={setActiveReviewTab}
+          setActiveSpecId={setActiveSpecId}
+        />
       ) : route === "dispatch" ? (
         <DispatchPage
           activeRequirementId={activeRequirementId}

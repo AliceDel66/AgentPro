@@ -29,12 +29,32 @@ class ConversationMessagePayload(BaseModel):
     createdAt: str
 
 
+class RequirementJobSummary(BaseModel):
+    id: str
+    status: str
+    progress: int
+    strategy: str
+    updatedAt: str
+
+
+class RequirementReviewSummary(BaseModel):
+    id: str
+    status: str
+    score: int
+    recommendedEngine: str | None = None
+    createdAt: str
+
+
 class RequirementListItem(BaseModel):
     id: str
     title: str
     status: str
     maturity: int
     route: str | None = None
+    workflowStatus: str | None = None
+    latestSpecId: str | None = None
+    latestJob: RequirementJobSummary | None = None
+    latestReview: RequirementReviewSummary | None = None
 
 
 class RequirementDetail(BaseModel):
