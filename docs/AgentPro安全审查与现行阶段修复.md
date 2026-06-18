@@ -34,7 +34,7 @@
 
 ### 🟠 高（High）
 
-#### H1. JWT 密钥存在公开默认值，且无启动校验
+#### H1. JWT 密钥存在公开默认值，且无启动校验 — ✅ 已修复（见 §三.4）
 - **位置**：`backend/app/core/config.py:28` → `jwt_secret: str = "CHANGE_ME_LOCAL_ONLY"`
 - **影响**：若生产环境忘记注入 `AGENTPRO_JWT_SECRET`，服务会以公开已知字符串签发/校验 JWT，攻击者可离线伪造任意用户的 access token（`create_access_token` 用 HS256 + 该密钥）。
 - **修复**：非 `local` 环境启动时强制校验密钥强度，缺省即拒绝启动。
@@ -112,7 +112,7 @@ if spec:
         raise HTTPException(status_code=404, detail="AgentSpec not found")
 ```
 
-#### M3. 默认监听 `0.0.0.0` 与默认开启 API 文档
+#### M3. 默认监听 `0.0.0.0` 与默认开启 API 文档 — ✅ 已修复（见 §三.4）
 - **位置**：`backend/app/core/config.py:16`（`api_host="0.0.0.0"`）、`:25`（`docs_enabled=True`）
 - **影响**：本地/桌面形态下监听所有网卡，局域网内可访问后端；生产环境默认暴露 `/docs`、`/openapi.json` 泄露完整接口结构。
 - **修复**：本地/桌面默认 `127.0.0.1`；容器部署用 `0.0.0.0` 但配合安全组隔离；`docs_enabled` 默认随 `env != "local"` 关闭。
@@ -157,6 +157,16 @@ if spec:
 - `backend/tests/conftest.py` 新增 `_hermetic_settings` autouse fixture：测试期间清空 SMTP 配置、使用测试专用 JWT 密钥、清理 `get_settings` 缓存。
 - **修复前**：测试读取真实 `.env`，每次运行都会连接生产 SMTP 真实发信，并导致 9/14 用例失败。
 - **修复后**：测试不再触网，14/14 全部通过。
+
+### 4. P0 安全加固（持续落地，逐项提交）✅ 进行中
+
+> 在上述基线上按安全审查清单逐项加固，每项独立提交并同步本文档。
+
+- **H1 + M3｜配置安全默认值**（`backend/app/core/config.py`、`app/main.py`、`.env.example`）
+  - 新增 `model_validator`：非 `local/test` 环境若 `jwt_secret` 为公开默认值或 <32 字符则**拒绝启动**（消除伪造登录态风险）。
+  - `api_host` 默认改为 `127.0.0.1`（容器/服务器显式设 `0.0.0.0`，Docker CMD 已带 `--host`，部署不受影响）。
+  - `docs_enabled` 改为三态（`None` 时按环境推导：local/test 开、其余关），新增 `docs_effective` 属性，`main.py` 改用之。
+  - 新增 `tests/test_config_security.py`（5 项），全套 **19/19 通过**。
 
 ---
 

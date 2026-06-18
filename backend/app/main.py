@@ -10,9 +10,9 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="AgentPro API",
         version="0.1.0",
-        docs_url="/docs" if settings.docs_enabled else None,
-        redoc_url="/redoc" if settings.docs_enabled else None,
-        openapi_url="/openapi.json" if settings.docs_enabled else None,
+        docs_url="/docs" if settings.docs_effective else None,
+        redoc_url="/redoc" if settings.docs_effective else None,
+        openapi_url="/openapi.json" if settings.docs_effective else None,
     )
     app.add_middleware(
         CORSMiddleware,

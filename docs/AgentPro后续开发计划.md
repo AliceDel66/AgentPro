@@ -38,14 +38,14 @@
 
 > 逐条对应审查文档编号，完成后逐项勾除。
 
-- [ ] **C1** 轮换并迁出全部生产凭据（RDS / JWT / SMTP），改用环境变量或 KMS 注入。
-- [ ] **H1** `get_settings()` 启动校验：非 local/test 环境若 JWT 密钥缺省或 <32 字节则拒绝启动。
+- [ ] **C1** 轮换并迁出全部生产凭据（RDS / JWT / SMTP），改用环境变量或 KMS 注入。（手动动作）
+- [x] **H1** `get_settings()` 启动校验：非 local/test 环境若 JWT 密钥缺省或 <32 字节则拒绝启动。✅
 - [ ] **H2** 引入独立 `AGENTPRO_SECRET_ENC_KEY`，与 JWT 密钥分离；编写一次性重加密迁移脚本。
 - [ ] **H3** 出站请求 SSRF 防护：对模型 `base_url` 做地址解析 + 私有/保留/回环地址黑名单 + 仅 https + 响应大小限制。
 - [ ] **M1** 基于 Redis 的登录限速与失败锁定（IP + 账号滑动窗口）。
 - [ ] **M2** 评审创建补 spec 归属校验。
-- [ ] **M3** `api_host`/`docs_enabled` 按环境取默认值（本地 127.0.0.1 + 文档开，生产 0.0.0.0 + 文档关）。
-- [ ] **配套** `.gitignore` 增补 `backend/*.db`；新增依赖与 `.env.example` 字段同步更新部署文档。
+- [x] **M3** `api_host`/`docs_enabled` 按环境取默认值（本地 127.0.0.1 + 文档开，生产文档关）。✅
+- [x] **配套** `.gitignore` 增补 `backend/*.db`；`.env.example` 字段同步。✅
 
 **验收**：`pytest` 全绿 + 新增安全用例（伪造 token 被拒、内网 base_url 被拒、越权 specId 返回 404、登录限速生效）。
 
