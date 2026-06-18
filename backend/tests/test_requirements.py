@@ -330,3 +330,28 @@ async def test_requirement_chat_keeps_plain_text_ai_response(
     created = create_response.json()["data"]
     assert created["messages"][-1]["content"].startswith("这个人事简历筛选 Agent")
     assert any("简历" in item["question"] for item in created["followupQuestions"])
+
+
+async def test_get_spec_returns_latest_generated_version(api_client: AsyncClient) -> None:
+    headers = await auth_headers(api_client)
+    create = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={"title": "幂等需求", "initialMessage": "做一个排班 agent"},
+    )
+    requirement_id = create.json()["data"]["id"]
+
+    first = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/spec/generate", headers=headers
+    )
+    second = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/spec/generate", headers=headers
+    )
+    assert second.json()["data"]["version"] > first.json()["data"]["version"]
+
+    # GET latest spec is a read: it returns the newest version without creating another.
+    latest = await api_client.get(
+        f"/api/v1/requirements/{requirement_id}/spec", headers=headers
+    )
+    assert latest.status_code == 200
+    assert latest.json()["data"]["version"] == second.json()["data"]["version"]

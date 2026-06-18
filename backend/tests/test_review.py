@@ -126,6 +126,33 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
     assert merge_response.json()["data"]["status"] == "merge_planned"
 
 
+async def test_latest_review_reads_without_creating(api_client: AsyncClient) -> None:
+    headers = await register_headers(api_client, "latest@example.com")
+    spec_id = await create_owned_spec(api_client, headers)
+    job_response = await api_client.post(
+        "/api/v1/dev-jobs", headers=headers, json={"strategy": "codex", "specId": spec_id}
+    )
+    job_id = job_response.json()["data"]["id"]
+
+    # No report yet: latest returns null instead of creating one.
+    empty = await api_client.get(f"/api/v1/reviews/latest?jobId={job_id}", headers=headers)
+    assert empty.status_code == 200
+    assert empty.json()["data"] is None
+
+    created = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
+    review_id = created.json()["data"]["id"]
+
+    latest = await api_client.get(f"/api/v1/reviews/latest?jobId={job_id}", headers=headers)
+    assert latest.status_code == 200
+    assert latest.json()["data"]["id"] == review_id
+
+    # Another user cannot read this report via latest.
+    attacker = await register_headers(api_client, "latest-attacker@example.com")
+    cross = await api_client.get(f"/api/v1/reviews/latest?jobId={job_id}", headers=attacker)
+    assert cross.status_code == 200
+    assert cross.json()["data"] is None
+
+
 async def test_review_rejects_other_users_spec(api_client: AsyncClient) -> None:
     owner = await register_headers(api_client, "owner@example.com")
     requirement_response = await api_client.post(

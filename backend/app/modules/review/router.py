@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -132,6 +132,33 @@ async def create_review(
     ]
     session.add_all(findings)
     await session.commit()
+    return ok(await serialize_report(session, report))
+
+
+@router.get("/latest")
+async def get_latest_review(
+    jobId: str | None = Query(default=None),
+    specId: str | None = Query(default=None),
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    """Return the most recent review for a job/spec owned by the user, or null.
+
+    Lets the Review page read instead of creating a report on every visit.
+    """
+    if not jobId and not specId:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="jobId or specId required"
+        )
+    statement = select(ReviewReport).where(ReviewReport.user_id == current_user.id)
+    if jobId:
+        statement = statement.where(ReviewReport.job_id == jobId)
+    if specId:
+        statement = statement.where(ReviewReport.spec_id == specId)
+    statement = statement.order_by(ReviewReport.created_at.desc())
+    report = (await session.execute(statement)).scalars().first()
+    if not report:
+        return ok(None)
     return ok(await serialize_report(session, report))
 
 

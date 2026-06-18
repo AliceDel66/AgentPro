@@ -607,3 +607,26 @@
 - Commit：
   - 哈希：待提交
   - 信息：实现需求对话 token 级流式
+
+### 24. AgentSpec 与评审页幂等读取（R4/R7）
+- 状态：已完成
+- 完成功能：
+  - SpecPage 打开时调用 `getAgentSpec` 读取最新草案，不再因进入页面自动生成新版本
+  - SpecPage 无草案时展示空态与显式“生成 AgentSpec 草案”按钮，侧栏新增“重新生成草案”（带 confirm）
+  - ReviewPage 打开时调用新增的 `getLatestReview` 只读最新报告，不再自动创建
+  - ReviewPage 无报告时展示空态与显式“生成评审报告”，有报告时新增“重新评审”（带 confirm）
+  - reviewService 新增 `getLatestReview`
+- 相关文件：
+  - src/pages/workspace/SpecPage.tsx
+  - src/pages/workspace/ReviewPage.tsx
+  - src/services/reviewService.ts
+  - backend/app/modules/review/router.py
+  - docs/Codex代码审查报告与后续开发计划.md
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 npm run build
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（48 passed）
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：修复 AgentSpec 与评审报告重复生成问题

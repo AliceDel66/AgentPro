@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AppButton } from "../../components/common/Button";
 import { LoadingState } from "../../components/common/LoadingState";
-import { acceptReviewRecommendation, createReviewReport, getReviewReport, mergeReviewStrengths, requestReviewRework } from "../../services/reviewService";
+import { acceptReviewRecommendation, createReviewReport, getLatestReview, getReviewReport, mergeReviewStrengths, requestReviewRework } from "../../services/reviewService";
 import type { ReviewReport } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -18,24 +18,32 @@ export function ReviewPage({ activeJobId, activeReviewId, activeSpecId, navigate
   const [loading, setLoading] = useState(false);
   const [action, setAction] = useState<"accept" | "rework" | null>(null);
   const [merging, setMerging] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const acting = action !== null;
 
   useEffect(() => {
     let cancelled = false;
+    // Reading only: never create a report just because the page opened.
     async function loadReport() {
       setLoading(true);
       setErrorMessage(null);
       try {
-        const result = activeReviewId
-          ? await getReviewReport(activeReviewId)
-          : await createReviewReport({
-              jobId: activeJobId ?? undefined,
-              specId: activeSpecId ?? undefined
-            });
-        if (!cancelled) {
-          setReport(result.data);
-          setActiveReviewId(result.data.id);
+        if (activeReviewId) {
+          const result = await getReviewReport(activeReviewId);
+          if (!cancelled) {
+            setReport(result.data);
+            setActiveReviewId(result.data.id);
+          }
+        } else {
+          const result = await getLatestReview({
+            jobId: activeJobId ?? undefined,
+            specId: activeSpecId ?? undefined
+          });
+          if (!cancelled) {
+            setReport(result.data);
+            if (result.data) setActiveReviewId(result.data.id);
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "读取评审报告失败";
@@ -55,6 +63,28 @@ export function ReviewPage({ activeJobId, activeReviewId, activeSpecId, navigate
       cancelled = true;
     };
   }, [activeJobId, activeReviewId, activeSpecId, setActiveReviewId]);
+
+  const handleGenerate = async (isRegenerate: boolean) => {
+    if (creating || acting) return;
+    if (isRegenerate && !window.confirm("重新评审会基于当前开发产物生成一份新的评审报告，确定继续？")) {
+      return;
+    }
+    setCreating(true);
+    setErrorMessage(null);
+    try {
+      const result = await createReviewReport({
+        jobId: activeJobId ?? undefined,
+        specId: activeSpecId ?? undefined
+      });
+      setReport(result.data);
+      setActiveReviewId(result.data.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "生成评审报告失败";
+      setErrorMessage(message);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const handleAccept = async () => {
     if (!report || acting) return;
@@ -112,24 +142,48 @@ export function ReviewPage({ activeJobId, activeReviewId, activeSpecId, navigate
           <div>
             <h1 className="m-0 text-[22px] font-bold text-agent-ink">自动评审报告</h1>
             <div className="mt-1 text-[13px] text-agent-muted">
-              {loading ? <LoadingState label="正在生成评审报告..." /> : report?.summary ?? "候选方案对比"}
+              {loading ? <LoadingState label="正在读取评审报告..." /> : report?.summary ?? "尚未生成评审报告"}
             </div>
           </div>
           <div className="flex gap-2.5">
-            <AppButton disabled={!report || acting} loading={action === "rework"} type="button" variant="secondary" onClick={() => void handleRework()}>
-              {action === "rework" ? "提交中..." : "要求返工"}
-            </AppButton>
-            <AppButton disabled={!report || acting || merging} loading={merging} type="button" variant="secondary" onClick={() => void handleMerge()}>
-              {merging ? "记录中..." : "合并优点"}
-            </AppButton>
-            <AppButton disabled={!report || acting} loading={action === "accept"} type="button" onClick={() => void handleAccept()}>
-              {action === "accept" ? "采纳中..." : "采纳推荐方案"}
-            </AppButton>
+            {report ? (
+              <>
+                <AppButton disabled={acting || creating} loading={creating} type="button" variant="ghost" onClick={() => void handleGenerate(true)}>
+                  {creating ? "评审中..." : "重新评审"}
+                </AppButton>
+                <AppButton disabled={acting} loading={action === "rework"} type="button" variant="secondary" onClick={() => void handleRework()}>
+                  {action === "rework" ? "提交中..." : "要求返工"}
+                </AppButton>
+                <AppButton disabled={acting || merging} loading={merging} type="button" variant="secondary" onClick={() => void handleMerge()}>
+                  {merging ? "记录中..." : "合并优点"}
+                </AppButton>
+                <AppButton disabled={acting} loading={action === "accept"} type="button" onClick={() => void handleAccept()}>
+                  {action === "accept" ? "采纳中..." : "采纳推荐方案"}
+                </AppButton>
+              </>
+            ) : activeJobId || activeSpecId ? (
+              <AppButton disabled={creating} loading={creating} type="button" onClick={() => void handleGenerate(false)}>
+                {creating ? "生成中..." : "生成评审报告"}
+              </AppButton>
+            ) : null}
           </div>
         </div>
 
         {errorMessage ? <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
 
+        {!report && !loading ? (
+          <div className="rounded-xl border border-dashed border-agent-border bg-white px-6 py-12 text-center">
+            <div className="text-base font-semibold text-agent-ink">尚未生成评审报告</div>
+            <div className="mt-1.5 text-[13px] text-agent-muted">
+              {activeJobId || activeSpecId
+                ? "点击右上角“生成评审报告”，系统会基于开发产物、日志与 AgentSpec 自动评审。"
+                : "请先创建开发任务或 AgentSpec。"}
+            </div>
+          </div>
+        ) : null}
+
+        {report ? (
+        <>
         <div className="mb-7 grid grid-cols-2 gap-5">
           <SummaryCard code="Cx" desc="后端评审记录中的候选方案基线。" score={report ? Math.max(0, report.score - 8) : 0} title="Codex 方案" />
           <SummaryCard code="Cl" desc={report?.summary ?? "等待后端评审结果。"} recommended={report?.recommendedEngine === "claude-code"} score={report?.score ?? 0} title="推荐方案" />
@@ -164,6 +218,8 @@ export function ReviewPage({ activeJobId, activeReviewId, activeSpecId, navigate
             )}
           </div>
         </div>
+        </>
+        ) : null}
       </div>
     </div>
   );

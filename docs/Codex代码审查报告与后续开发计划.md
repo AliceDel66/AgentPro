@@ -340,6 +340,15 @@ npm run build
 
 ### P1：AgentSpec 生成不是幂等操作
 
+状态：已修复（Claude 实施）
+修复 commit：修复 AgentSpec 与评审报告重复生成问题
+验证：
+- backend/.venv/bin/python -m pytest backend/tests（48 passed，含 GET spec 返回最新版本用例）
+- npm run build
+关键改动：
+- `SpecPage.tsx` 默认调用 `getAgentSpec`（读取 latest），打开页面不再生成新版本；无草案时展示空态与显式“生成 AgentSpec 草案”按钮；侧栏新增“重新生成草案”（带确认）。
+残余风险：暂无；版本仅由用户显式点击生成时递增。
+
 位置：
 
 - `src/pages/workspace/SpecPage.tsx`
@@ -421,6 +430,16 @@ npm run build
 - workspace 路由统一走 auth guard。
 
 ### P2：Review 页会重复创建报告
+
+状态：已修复（Claude 实施）
+修复 commit：修复 AgentSpec 与评审报告重复生成问题
+验证：
+- backend/.venv/bin/python -m pytest backend/tests（48 passed，含 /reviews/latest 读取与跨用户隔离用例）
+- npm run build
+关键改动：
+- 后端新增 `GET /reviews/latest?jobId=&specId=`，按 user_id 过滤返回最新报告或 null。
+- `ReviewPage.tsx` 打开时只读 latest，不再自动创建；无报告时展示空态与显式“生成评审报告”按钮；有报告时提供“重新评审”（带确认）。
+残余风险：暂无；同一 job/spec 默认复用最新报告，新报告仅由用户显式触发。
 
 位置：
 

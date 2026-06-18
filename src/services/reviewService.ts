@@ -10,8 +10,15 @@ const mockReview: ReviewReport = {
   performanceScore: 85
 };
 
-export function getReviewReport(jobId: string) {
-  return apiGet(`/reviews/${jobId}`, mockReview);
+export function getReviewReport(reviewId: string) {
+  return apiGet(`/reviews/${reviewId}`, mockReview);
+}
+
+export function getLatestReview(params: { jobId?: string; specId?: string }) {
+  const query = new URLSearchParams();
+  if (params.jobId) query.set("jobId", params.jobId);
+  if (params.specId) query.set("specId", params.specId);
+  return apiGet<ReviewReport | null>(`/reviews/latest?${query.toString()}`, null);
 }
 
 export function createReviewReport(payload: { jobId?: string; specId?: string }) {

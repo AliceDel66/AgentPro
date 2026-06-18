@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
-import { approveAgentSpec, archiveRequirement, generateAgentSpec } from "../../services/agentSpecService";
+import { approveAgentSpec, archiveRequirement, generateAgentSpec, getAgentSpec } from "../../services/agentSpecService";
 import type { AgentSpecDraft } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -30,6 +30,7 @@ function getRiskList(body: Record<string, unknown>) {
 export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: SpecPageProps) {
   const [spec, setSpec] = useState<AgentSpecDraft | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [action, setAction] = useState<"approve" | "archive" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const saving = action !== null;
@@ -47,14 +48,15 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
       setLoading(true);
       setErrorMessage(null);
       try {
-        const result = await generateAgentSpec(requirementId);
+        // Reading only: opening the page must not generate a new version.
+        const result = await getAgentSpec(requirementId);
         if (!cancelled) {
           setSpec(result.data);
           setActiveSpecId(result.data.id);
         }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "生成 AgentSpec 失败";
-        if (!cancelled) setErrorMessage(message);
+      } catch {
+        // No spec yet is the expected empty case; show the generate prompt, not an error.
+        if (!cancelled) setSpec(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -104,6 +106,25 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
     }
   };
 
+  const handleGenerate = async (isRegenerate: boolean) => {
+    if (!activeRequirementId || generating) return;
+    if (isRegenerate && !window.confirm("重新生成会基于最新对话创建一个新的 AgentSpec 版本，确定继续？")) {
+      return;
+    }
+    setGenerating(true);
+    setErrorMessage(null);
+    try {
+      const result = await generateAgentSpec(activeRequirementId);
+      setSpec(result.data);
+      setActiveSpecId(result.data.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "生成 AgentSpec 失败";
+      setErrorMessage(message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
       <section className="min-w-0 flex-1 overflow-y-auto bg-agent-bg px-9 py-8 pb-24">
@@ -113,11 +134,12 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
             <StatusChip tone={spec?.status === "approved" ? "green" : "blue"}>{spec?.status === "approved" ? "已审批" : "待审批"}</StatusChip>
           </div>
           <div className="-mt-4 mb-7 text-[13px] text-agent-muted">
-            {loading ? <LoadingState label="正在生成 AgentSpec..." /> : spec ? `AgentSpec v${spec.version}` : "未生成 AgentSpec"}
+            {loading ? <LoadingState label="正在读取 AgentSpec..." /> : spec ? `AgentSpec v${spec.version}` : "尚未生成 AgentSpec 草案"}
           </div>
 
           {errorMessage ? <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
 
+          {spec ? (
           <div className="overflow-hidden rounded-xl border border-agent-border bg-white">
             <SpecSection index="1" title="业务目标">
               {String(body.objective ?? "暂无业务目标。")}
@@ -149,6 +171,19 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
               </div>
             </div>
           </div>
+          ) : !loading ? (
+            <div className="rounded-xl border border-dashed border-agent-border bg-white px-7 py-12 text-center">
+              <div className="text-base font-semibold text-agent-ink">尚未生成 AgentSpec 草案</div>
+              <div className="mx-auto mt-1.5 max-w-[420px] text-[13px] leading-6 text-agent-muted">
+                需求澄清完成后点击下方按钮生成草案；再次进入本页不会重复生成新版本。
+              </div>
+              <div className="mt-5 flex justify-center">
+                <AppButton disabled={generating || !activeRequirementId} loading={generating} type="button" onClick={() => void handleGenerate(false)}>
+                  {generating ? "生成中..." : "生成 AgentSpec 草案"}
+                </AppButton>
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -159,6 +194,11 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
         <AppButton disabled={!activeRequirementId || saving} loading={action === "archive"} type="button" variant="secondary" onClick={() => void handleArchive()}>
           {action === "archive" ? "存档中..." : "暂时存档"}
         </AppButton>
+        {spec ? (
+          <AppButton disabled={generating || saving} loading={generating} type="button" variant="ghost" onClick={() => void handleGenerate(true)}>
+            {generating ? "生成中..." : "重新生成草案"}
+          </AppButton>
+        ) : null}
         <AppButton type="button" variant="ghost" onClick={() => navigate("followup")}>
           继续澄清
         </AppButton>

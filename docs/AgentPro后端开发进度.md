@@ -473,3 +473,27 @@
 - Commit：
   - 哈希：待提交
   - 信息：修复开发任务关联资源的用户权限校验
+
+### 18. AgentSpec 与评审报告幂等读取（R4/R7）
+- 状态：已完成
+- 完成功能：
+  - 新增 `GET /api/v1/reviews/latest?jobId=&specId=`，按 user_id 过滤返回最新报告或 null（声明顺序置于 `/{review_id}` 之前避免被路径吞掉）
+  - 前端 ReviewPage 打开仅读取 latest，不再自动创建报告；空态显式“生成评审报告”，有报告时“重新评审”需确认
+  - 前端 SpecPage 打开调用 `getAgentSpec` 读取 latest，不再自动生成；空态显式“生成 AgentSpec 草案”，侧栏“重新生成草案”需确认
+  - 新增回归测试：`/reviews/latest` 读取与跨用户隔离、GET spec 返回最新版本
+- 相关文件：
+  - backend/app/modules/review/router.py
+  - backend/tests/test_review.py
+  - backend/tests/test_requirements.py
+  - src/pages/workspace/ReviewPage.tsx
+  - src/pages/workspace/SpecPage.tsx
+  - src/services/reviewService.ts
+  - docs/Codex代码审查报告与后续开发计划.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（48 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：修复 AgentSpec 与评审报告重复生成问题
