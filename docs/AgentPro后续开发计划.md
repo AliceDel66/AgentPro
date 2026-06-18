@@ -58,7 +58,7 @@
   - 前端：`ForgotPasswordPage` 接入真实 API，含验证码冷却、loading、校验与本地调试码自动填入。
   - 残留：发码接口对任意邮箱均会发送（与注册一致），用户枚举/防刷加固见 P3。
 - [x] **设置页真实账号信息**（对应 L4）✅：接 `/auth/me`，展示真实用户名/邮箱/验证状态（含 loading 与错误态），移除「张明」等硬编码。
-- [ ] **Token 自动续期**（对应 L2）：`apiClient` 在 401 时用 refresh token 自动续签并重放原请求，失败再跳登录。
+- [x] **Token 自动续期**（对应 L2）✅：`apiClient` 在 401 时用 refresh token 自动续签并重放原请求（并发去重、失败清空令牌）；自动跳登录页待 App 级守卫补齐。
 - [ ] **令牌存储加固**（对应 M4）：Tauri 安全存储保存 refresh token，access token 仅驻内存。
 - [ ] **Mock 开关治理**（对应 L6）：`VITE_AGENTPRO_MOCK_API` 仅限开发，生产构建禁用并在控制台显著告警。
 - [ ] **审计日志落地**（对应 L7）：审批、开发启动、评审采纳、密钥变更等高风险动作写入 `audit_logs`。

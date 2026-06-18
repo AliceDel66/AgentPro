@@ -127,7 +127,7 @@ if spec:
 | 编号 | 位置 | 说明 | 建议 |
 | --- | --- | --- | --- |
 | L1 | `backend/app/modules/runner/router.py:192`（`/stream`）| SSE 用 Authorization 头鉴权，浏览器 `EventSource` 无法带自定义头，前端实际无法消费 | 改为 query token 一次性票据，或用 fetch + ReadableStream |
-| L2 | `src/services/apiClient.ts` | access token 30 分钟过期后无自动刷新，`refreshSession` 未接入 | 在 `parseApiResponse` 401 时用 refresh token 自动续签并重放 |
+| L2 | `src/services/apiClient.ts` | access token 30 分钟过期后无自动刷新，`refreshSession` 未接入 | ✅ 已修复（见 §三.5） |
 | L3 | `src/pages/auth/ForgotPasswordPage.tsx` | 页面未接任何 API，后端也无重置密码端点 | ✅ 已修复（见 §三.5） |
 | L4 | `src/pages/workspace/SettingsPage.tsx` | 账号区为硬编码假数据（"张明…最后同步 3 分钟前"） | ✅ 已修复（见 §三.5） |
 | L5 | `.gitignore` | 未忽略 `backend/*.db`，`agentpro_local.db` 处于未跟踪状态 | `.gitignore` 增加 `backend/*.db` |
@@ -200,6 +200,10 @@ if spec:
 
 - **L4｜设置页真实账号信息**（`src/pages/workspace/SettingsPage.tsx`、`src/services/authService.ts`）
   - 新增 `getCurrentUser`（`GET /auth/me`）；设置页改为展示真实用户名/邮箱/验证状态，含 loading 与错误态，移除「张明 / 最后同步 3 分钟前」等硬编码假数据。
+
+- **L2｜Token 自动续期**（`src/services/apiClient.ts`）
+  - 新增 `authedFetch`：请求遇 401（非 `/auth/*`）时用 refresh token 自动续签并重放一次；`ensureRefreshed` 对并发 401 去重为单次 `/auth/refresh`；刷新失败清空本地令牌。
+  - 残留：刷新失败后的「自动跳转登录页」需 App 级鉴权守卫配合（见 P3）。
 
 ---
 
