@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_secret, encrypt_secret
+from app.core.net import assert_safe_outbound_url
 from app.core.responses import ok
 from app.db.models import ModelProviderConfig, User
 from app.db.session import get_db_session
@@ -58,6 +59,7 @@ async def fetch_openai_model_names(base_url: str, api_key: str | None) -> list[s
 
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     url = f"{base_url.rstrip('/')}/models"
+    assert_safe_outbound_url(url)
     async with httpx.AsyncClient(timeout=8) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()

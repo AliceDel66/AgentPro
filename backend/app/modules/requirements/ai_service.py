@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_secret
+from app.core.net import assert_safe_outbound_url
 from app.db.models import ModelProviderConfig
 from app.modules.requirements.graph import RequirementGraphState, run_requirement_graph
 
@@ -72,9 +73,11 @@ async def call_openai_chat_completion(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
+    chat_url = build_chat_url(base_url)
+    assert_safe_outbound_url(chat_url)
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
-            build_chat_url(base_url),
+            chat_url,
             headers=headers,
             json={
                 "model": model,

@@ -70,7 +70,7 @@ def get_secret_fernet() -> Fernet:
     return Fernet(key)
 ```
 
-#### H3. SSRF：模型 `base_url` 用户可控且后端直接发起请求
+#### H3. SSRF：模型 `base_url` 用户可控且后端直接发起请求 — ✅ 已修复（见 §三.4）
 - **位置**：`backend/app/modules/models/router.py:55-67`（`fetch_openai_model_names`）、`backend/app/modules/requirements/ai_service.py:65-86`（`call_openai_chat_completion`）
 - **现象**：用户在「模型配置」里填的 `baseUrl` 会被后端拼成 URL 直接 `httpx` 请求。当前仅对 `example/localhost/127.0.0.1` 做了「跳过」处理，但未阻止 `169.254.169.254`（云元数据）、`10.x/172.16.x/192.168.x`（内网）、`[::1]`、内网域名等。
 - **影响**：配合 `api_host=0.0.0.0`，若后端部署在云主机，攻击者可借此探测内网服务、读取云厂商元数据（可能含临时凭据）。
@@ -172,6 +172,12 @@ if spec:
   - 新增独立 `AGENTPRO_SECRET_ENC_KEY`；用 `MultiFernet` 实现惰性密钥轮换：加密用主密钥（优先 `secret_enc_key`），解密依次尝试所有密钥。
   - 旧密文（JWT 密钥派生）在引入新密钥后**仍可解密**，下次保存自动改用新密钥，**无需停机迁移**；留空则与旧行为一致。
   - 新增 `tests/test_crypto.py`（2 项，含旧密文兼容性），全套 **21/21 通过**。
+
+- **H3｜出站请求 SSRF 防护**（`backend/app/core/net.py`，应用于 `models/router.py`、`requirements/ai_service.py`）
+  - 新增 `assert_safe_outbound_url`：拒绝非 http(s) 协议，并解析目标主机，命中私有/回环/链路本地（含云元数据 `169.254.169.254`）/保留/组播/未指定地址即拒绝。
+  - 在 `fetch_openai_model_names` 与 `call_openai_chat_completion` 发起请求前调用；httpx 默认不跟随重定向，避免重定向绕过。
+  - 残留风险：解析与连接之间存在 TOCTOU / DNS-rebinding 窗口，如需更强保证应固定已解析 IP 再连接（已在代码与本文档标注）。
+  - 新增 `tests/test_net.py`（4 项），全套 **33/33 通过**。
 
 ---
 
