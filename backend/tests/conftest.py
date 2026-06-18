@@ -50,6 +50,7 @@ async def api_client() -> AsyncGenerator[AsyncClient]:
             yield session
 
     app = create_app()
+    app.state.db_session_factory = session_factory
     app.dependency_overrides[get_db_session] = override_db_session
 
     async with AsyncClient(

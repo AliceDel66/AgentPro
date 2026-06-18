@@ -19,6 +19,7 @@ class DevJobPayload(BaseModel):
     strategy: RunnerStrategy
     requirementId: str | None = None
     specId: str | None = None
+    sourceReviewId: str | None = None
 
 
 class DevJobLeaseRequest(BaseModel):

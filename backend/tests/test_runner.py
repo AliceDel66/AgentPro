@@ -1,6 +1,8 @@
 from httpx import AsyncClient
 
 from app.core.config import get_settings
+from app.db.models import AgentSpec, DevJob, Requirement, ReviewFinding, ReviewReport
+from app.modules.runner.executor import prompt_for_job
 
 
 async def register_headers(client: AsyncClient, email: str) -> dict[str, str]:
@@ -183,6 +185,114 @@ async def test_runner_execute_invokes_available_cli(
 
     stream_response = await api_client.get(f"/api/v1/dev-jobs/{job_id}/stream", headers=headers)
     assert "fake codex" in stream_response.text or "执行完成" in stream_response.text
+
+
+async def test_runner_execute_async_sets_job_running_and_records_events(
+    api_client: AsyncClient,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_codex = fake_bin / "codex"
+    fake_codex.write_text(
+        "#!/bin/sh\n"
+        "printf 'fake async codex received %s\\n' \"$*\"\n"
+        "printf '\\nasync runner touched README\\n' >> README.md\n",
+        encoding="utf-8",
+    )
+    fake_codex.chmod(0o755)
+
+    monkeypatch.setenv("PATH", f"{fake_bin}:/usr/bin:/bin")
+    monkeypatch.setenv("AGENTPRO_RUNNER_EXECUTION_ENABLED", "true")
+    monkeypatch.setenv("AGENTPRO_RUNNER_WORKSPACE_ROOT", str(tmp_path / "runs"))
+    get_settings.cache_clear()
+
+    headers = await runner_auth_headers(api_client)
+    spec_id = await create_owned_spec(api_client, headers)
+    create_response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "codex", "specId": spec_id},
+    )
+    job_id = create_response.json()["data"]["id"]
+
+    execute_response = await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/execute/async",
+        headers=headers,
+        json={},
+    )
+
+    assert execute_response.status_code == 200
+    initial = execute_response.json()["data"]
+    assert initial["status"] == "running"
+    assert initial["progress"] == 1
+
+    job_response = await api_client.get(f"/api/v1/dev-jobs/{job_id}", headers=headers)
+    assert job_response.status_code == 200
+    assert job_response.json()["data"]["status"] == "completed"
+
+    events_response = await api_client.get(f"/api/v1/dev-jobs/{job_id}/events", headers=headers)
+    messages = [item["message"] for item in events_response.json()["data"]]
+    assert any("后台执行队列" in message for message in messages)
+    assert any("执行完成" in message for message in messages)
+
+
+def test_optimization_prompt_contains_review_findings() -> None:
+    job = DevJob(
+        id="job-1",
+        user_id="user-1",
+        requirement_id="req-1",
+        spec_id="spec-1",
+        source_review_id="review-1",
+        strategy="codex",
+        status="queued",
+        progress=0,
+    )
+    requirement = Requirement(
+        id="req-1",
+        user_id="user-1",
+        title="优化 Agent",
+        status="approved",
+        maturity=90,
+        summary="需要优化稳定性",
+    )
+    spec = AgentSpec(
+        id="spec-1",
+        requirement_id="req-1",
+        version=1,
+        title="优化 AgentSpec",
+        status="approved",
+        body={"objective": "提升质量"},
+    )
+    report = ReviewReport(
+        id="review-1",
+        user_id="user-1",
+        job_id="job-old",
+        spec_id="spec-1",
+        status="draft",
+        recommended_engine="codex",
+        score=62,
+        hallucination_risk=44,
+        stability_score=58,
+        performance_score=71,
+        summary="测试覆盖不足，需要优化。",
+    )
+    finding = ReviewFinding(
+        id="finding-1",
+        review_id="review-1",
+        severity="high",
+        category="test",
+        title="缺少关键测试",
+        detail="没有覆盖失败重试路径。",
+        evidence={"path": "tests"},
+    )
+
+    prompt = prompt_for_job(job, requirement, spec, report, [finding])
+
+    assert "sourceReview" in prompt
+    assert "缺少关键测试" in prompt
+    assert "没有覆盖失败重试路径" in prompt
 
 
 async def test_create_job_rejects_other_users_spec(api_client: AsyncClient) -> None:

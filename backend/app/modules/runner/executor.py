@@ -12,7 +12,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.db.models import AgentSpec, DevJob, DevJobArtifact, DevJobEvent, Requirement
+from app.db.models import (
+    AgentSpec,
+    DevJob,
+    DevJobArtifact,
+    DevJobEvent,
+    Requirement,
+    ReviewFinding,
+    ReviewReport,
+)
 
 ENGINE_PROGRAMS = {
     "codex": "codex",
@@ -147,10 +155,62 @@ async def load_requirement_for_job(session: AsyncSession, job: DevJob) -> Requir
     return None
 
 
-def prompt_for_job(job: DevJob, requirement: Requirement | None, spec: AgentSpec | None) -> str:
+async def load_source_review_for_job(
+    session: AsyncSession,
+    job: DevJob,
+) -> tuple[ReviewReport, list[ReviewFinding]] | tuple[None, list[ReviewFinding]]:
+    if not job.source_review_id:
+        return None, []
+    report = await session.get(ReviewReport, job.source_review_id)
+    if not report or report.user_id != job.user_id:
+        return None, []
+    result = await session.execute(
+        select(ReviewFinding)
+        .where(ReviewFinding.review_id == report.id)
+        .order_by(ReviewFinding.created_at.asc())
+    )
+    return report, list(result.scalars().all())
+
+
+def review_context_payload(
+    report: ReviewReport | None,
+    findings: list[ReviewFinding],
+) -> dict[str, Any] | None:
+    if not report:
+        return None
+    return {
+        "id": report.id,
+        "status": report.status,
+        "recommendedEngine": report.recommended_engine,
+        "score": report.score,
+        "hallucinationRisk": report.hallucination_risk,
+        "stabilityScore": report.stability_score,
+        "performanceScore": report.performance_score,
+        "summary": report.summary,
+        "findings": [
+            {
+                "severity": finding.severity,
+                "category": finding.category,
+                "title": finding.title,
+                "detail": finding.detail,
+                "evidence": finding.evidence,
+            }
+            for finding in findings
+        ],
+    }
+
+
+def prompt_for_job(
+    job: DevJob,
+    requirement: Requirement | None,
+    spec: AgentSpec | None,
+    source_review: ReviewReport | None = None,
+    source_findings: list[ReviewFinding] | None = None,
+) -> str:
     payload = {
         "jobId": job.id,
         "strategy": job.strategy,
+        "sourceReview": review_context_payload(source_review, source_findings or []),
         "requirement": {
             "id": requirement.id,
             "title": requirement.title,
@@ -184,6 +244,10 @@ def prompt_for_job(job: DevJob, requirement: Requirement | None, spec: AgentSpec
             ),
             "- 优先运行项目已有检查命令，例如 npm run typecheck、npm run build、pytest、ruff。",
             "- 最终输出完成内容、测试结果、风险和需要人工确认的问题。",
+            (
+                "- 如果任务上下文包含 sourceReview，请优先修复评审 findings 中的高风险、"
+                "稳定性、测试覆盖和幻觉风险问题，并在最终输出中逐项说明。"
+            ),
             "",
             "任务上下文 JSON：",
             "```json",
@@ -399,7 +463,8 @@ async def execute_dev_job(session: AsyncSession, job: DevJob) -> DevJob:
 
     requirement = await load_requirement_for_job(session, job)
     spec = await load_spec_for_job(session, job)
-    prompt = prompt_for_job(job, requirement, spec)
+    source_review, source_findings = await load_source_review_for_job(session, job)
+    prompt = prompt_for_job(job, requirement, spec, source_review, source_findings)
     await add_event(
         session,
         job,
@@ -407,7 +472,11 @@ async def execute_dev_job(session: AsyncSession, job: DevJob) -> DevJob:
         message="已生成 AgentSpec 开发任务包，准备执行本地 Runner。",
         progress=8,
         status="running",
-        payload={"hasSpec": spec is not None, "hasRequirement": requirement is not None},
+        payload={
+            "hasSpec": spec is not None,
+            "hasRequirement": requirement is not None,
+            "sourceReviewId": source_review.id if source_review else None,
+        },
     )
 
     results = []

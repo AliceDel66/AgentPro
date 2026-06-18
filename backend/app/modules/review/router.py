@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from collections.abc import Callable
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +16,7 @@ from app.db.models import (
     ReviewReport,
     User,
 )
-from app.db.session import get_db_session
+from app.db.session import async_session_factory, get_db_session
 from app.modules.auth.router import get_current_user
 from app.modules.review.analyzer import analyze_review
 from app.modules.review.schemas import (
@@ -23,10 +25,29 @@ from app.modules.review.schemas import (
     ReviewFindingPayload,
     ReviewReportPayload,
 )
+from app.modules.runner.executor import execute_dev_job, runner_engines
+from app.modules.runner.schemas import DevJobPayload
 
 router = APIRouter(prefix="/reviews")
 db_session_dependency = Depends(get_db_session)
 current_user_dependency = Depends(get_current_user)
+
+
+def session_factory_for_request(request: Request):
+    return getattr(request.app.state, "db_session_factory", async_session_factory)
+
+
+def serialize_job(job: DevJob) -> DevJobPayload:
+    return DevJobPayload(
+        id=job.id,
+        status=job.status,
+        progress=job.progress,
+        engines=runner_engines(job.strategy),
+        strategy=job.strategy,
+        requirementId=job.requirement_id,
+        specId=job.spec_id,
+        sourceReviewId=job.source_review_id,
+    )
 
 
 def serialize_finding(finding: ReviewFinding) -> ReviewFindingPayload:
@@ -44,9 +65,26 @@ async def serialize_report(session: AsyncSession, report: ReviewReport) -> Revie
     result = await session.execute(
         select(ReviewFinding).where(ReviewFinding.review_id == report.id)
     )
+    job = await session.get(DevJob, report.job_id) if report.job_id else None
+    spec = await session.get(AgentSpec, report.spec_id) if report.spec_id else None
+    if not spec and job and job.spec_id:
+        spec = await session.get(AgentSpec, job.spec_id)
+    requirement_id = spec.requirement_id if spec else job.requirement_id if job else None
+    requirement = await session.get(Requirement, requirement_id) if requirement_id else None
+    optimization_result = await session.execute(
+        select(DevJob)
+        .where(DevJob.source_review_id == report.id)
+        .order_by(DevJob.created_at.desc())
+    )
+    optimization_job = optimization_result.scalars().first()
     return ReviewReportPayload(
         id=report.id,
         status=report.status,
+        jobId=report.job_id,
+        specId=report.spec_id,
+        requirementId=requirement.id if requirement else requirement_id,
+        requirementTitle=requirement.title if requirement else None,
+        createdAt=report.created_at.isoformat(),
         recommendedEngine=report.recommended_engine or "codex",
         score=report.score,
         hallucinationRisk=report.hallucination_risk,
@@ -54,6 +92,7 @@ async def serialize_report(session: AsyncSession, report: ReviewReport) -> Revie
         performanceScore=report.performance_score,
         summary=report.summary,
         findings=[serialize_finding(item) for item in result.scalars().all()],
+        optimizationJob=serialize_job(optimization_job) if optimization_job else None,
     )
 
 
@@ -64,20 +103,20 @@ async def get_owned_report(report_id: str, session: AsyncSession, user: User) ->
     return report
 
 
-@router.post("")
-async def create_review(
-    body: ReviewCreate,
-    session: AsyncSession = db_session_dependency,
-    current_user: User = current_user_dependency,
-):
-    job = await session.get(DevJob, body.jobId) if body.jobId else None
-    spec = await session.get(AgentSpec, body.specId) if body.specId else None
-    if job and job.user_id != current_user.id:
+async def resolve_review_context(
+    session: AsyncSession,
+    user: User,
+    job_id: str | None,
+    spec_id: str | None,
+) -> tuple[DevJob | None, AgentSpec | None]:
+    job = await session.get(DevJob, job_id) if job_id else None
+    spec = await session.get(AgentSpec, spec_id) if spec_id else None
+    if job and job.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dev job not found")
     if spec:
         # A spec is owned transitively via its requirement; block cross-user references.
         requirement = await session.get(Requirement, spec.requirement_id)
-        if not requirement or requirement.user_id != current_user.id:
+        if not requirement or requirement.user_id != user.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AgentSpec not found")
     if not job and not spec:
         raise HTTPException(
@@ -87,9 +126,17 @@ async def create_review(
         candidate = await session.get(AgentSpec, job.spec_id)
         if candidate:
             candidate_requirement = await session.get(Requirement, candidate.requirement_id)
-            if candidate_requirement and candidate_requirement.user_id == current_user.id:
+            if candidate_requirement and candidate_requirement.user_id == user.id:
                 spec = candidate
+    return job, spec
 
+
+async def create_review_record(
+    session: AsyncSession,
+    user_id: str,
+    job: DevJob | None,
+    spec: AgentSpec | None,
+) -> ReviewReport:
     event_result = (
         await session.execute(select(DevJobEvent).where(DevJobEvent.job_id == job.id))
         if job
@@ -105,7 +152,7 @@ async def create_review(
     analysis = analyze_review(events=events, artifacts=artifacts, spec=spec)
 
     report = ReviewReport(
-        user_id=current_user.id,
+        user_id=user_id,
         job_id=job.id if job else None,
         spec_id=spec.id if spec else None,
         status="draft",
@@ -131,8 +178,33 @@ async def create_review(
         for item in analysis.findings
     ]
     session.add_all(findings)
+    await session.flush()
+    return report
+
+
+@router.post("")
+async def create_review(
+    body: ReviewCreate,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    job, spec = await resolve_review_context(session, current_user, body.jobId, body.specId)
+    report = await create_review_record(session, current_user.id, job, spec)
     await session.commit()
     return ok(await serialize_report(session, report))
+
+
+@router.get("")
+async def list_reviews(
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    result = await session.execute(
+        select(ReviewReport)
+        .where(ReviewReport.user_id == current_user.id)
+        .order_by(ReviewReport.created_at.desc())
+    )
+    return ok([await serialize_report(session, report) for report in result.scalars().all()])
 
 
 @router.get("/latest")
@@ -171,6 +243,133 @@ async def get_review(
     return ok(
         await serialize_report(session, await get_owned_report(review_id, session, current_user))
     )
+
+
+async def optimization_background(job_id: str, session_factory: Callable):
+    async with session_factory() as session:
+        job = await session.get(DevJob, job_id)
+        if not job:
+            return
+        try:
+            await execute_dev_job(session, job)
+        except Exception as exc:
+            session.add(
+                DevJobEvent(
+                    job_id=job.id,
+                    level="error",
+                    phase="execution.error",
+                    message=f"后台优化任务异常：{exc.__class__.__name__}",
+                    payload={},
+                )
+            )
+            job.status = "failed"
+            job.progress = 100
+            await session.commit()
+
+        await session.refresh(job)
+        spec = await session.get(AgentSpec, job.spec_id) if job.spec_id else None
+        await create_review_record(session, job.user_id, job, spec)
+        await session.commit()
+
+
+@router.post("/{review_id}/regenerate")
+async def regenerate_review(
+    review_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    report = await get_owned_report(review_id, session, current_user)
+    job, spec = await resolve_review_context(
+        session,
+        current_user,
+        report.job_id,
+        report.spec_id,
+    )
+    new_report = await create_review_record(session, current_user.id, job, spec)
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="review.regenerate",
+        resource_type="review",
+        resource_id=report.id,
+        payload={"newReviewId": new_report.id},
+    )
+    await session.commit()
+    return ok(await serialize_report(session, new_report))
+
+
+@router.post("/{review_id}/optimize")
+async def optimize_from_review(
+    review_id: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    report = await get_owned_report(review_id, session, current_user)
+    source_job = await session.get(DevJob, report.job_id) if report.job_id else None
+    spec = await session.get(AgentSpec, report.spec_id) if report.spec_id else None
+    if not spec and source_job and source_job.spec_id:
+        spec = await session.get(AgentSpec, source_job.spec_id)
+    if source_job and source_job.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dev job not found")
+    if spec:
+        requirement = await session.get(Requirement, spec.requirement_id)
+        if not requirement or requirement.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AgentSpec not found")
+
+    requirement_id = (
+        source_job.requirement_id
+        if source_job and source_job.requirement_id
+        else spec.requirement_id if spec else None
+    )
+    spec_id = spec.id if spec else source_job.spec_id if source_job else None
+    if not requirement_id and not spec_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Review has no optimizable job or spec",
+        )
+    strategy = (
+        "parallel"
+        if source_job and source_job.strategy == "parallel"
+        else report.recommended_engine or "codex"
+    )
+    job = DevJob(
+        user_id=current_user.id,
+        requirement_id=requirement_id,
+        spec_id=spec_id,
+        source_review_id=report.id,
+        strategy=strategy,
+        status="running",
+        progress=1,
+    )
+    session.add(job)
+    await session.flush()
+    session.add(
+        DevJobEvent(
+            job_id=job.id,
+            level="info",
+            phase="optimization.enqueue",
+            message="已根据评审报告创建后台优化任务。",
+            payload={"sourceReviewId": report.id},
+        )
+    )
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="review.optimize",
+        resource_type="review",
+        resource_id=report.id,
+        payload={"jobId": job.id, "strategy": strategy},
+    )
+    await session.commit()
+    await session.refresh(job)
+    background_tasks.add_task(
+        optimization_background,
+        job.id,
+        session_factory_for_request(request),
+    )
+    return ok(await serialize_report(session, report))
 
 
 @router.post("/{review_id}/accept")

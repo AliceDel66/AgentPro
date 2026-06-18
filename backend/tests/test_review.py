@@ -1,5 +1,7 @@
 from httpx import AsyncClient
 
+from app.core.config import get_settings
+
 
 async def register_headers(client: AsyncClient, email: str) -> dict[str, str]:
     code_response = await client.post("/api/v1/auth/email-code", json={"email": email})
@@ -151,6 +153,132 @@ async def test_latest_review_reads_without_creating(api_client: AsyncClient) -> 
     cross = await api_client.get(f"/api/v1/reviews/latest?jobId={job_id}", headers=attacker)
     assert cross.status_code == 200
     assert cross.json()["data"] is None
+
+
+async def test_review_list_returns_only_current_user_reports(api_client: AsyncClient) -> None:
+    owner = await register_headers(api_client, "review-list-owner@example.com")
+    owner_spec_id = await create_owned_spec(api_client, owner)
+    owner_job = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=owner,
+        json={"strategy": "codex", "specId": owner_spec_id},
+    )
+    owner_review = await api_client.post(
+        "/api/v1/reviews",
+        headers=owner,
+        json={"jobId": owner_job.json()["data"]["id"]},
+    )
+    assert owner_review.status_code == 200
+
+    other = await register_headers(api_client, "review-list-other@example.com")
+    other_spec_id = await create_owned_spec(api_client, other)
+    other_job = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=other,
+        json={"strategy": "codex", "specId": other_spec_id},
+    )
+    await api_client.post(
+        "/api/v1/reviews",
+        headers=other,
+        json={"jobId": other_job.json()["data"]["id"]},
+    )
+
+    list_response = await api_client.get("/api/v1/reviews", headers=owner)
+    assert list_response.status_code == 200
+    reports = list_response.json()["data"]
+    assert [item["id"] for item in reports] == [owner_review.json()["data"]["id"]]
+    assert reports[0]["createdAt"]
+    assert reports[0]["jobId"] == owner_job.json()["data"]["id"]
+
+
+async def test_review_regenerate_creates_new_report_from_same_context(
+    api_client: AsyncClient,
+) -> None:
+    headers = await register_headers(api_client, "regenerate@example.com")
+    spec_id = await create_owned_spec(api_client, headers)
+    job_response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "codex", "specId": spec_id},
+    )
+    job_id = job_response.json()["data"]["id"]
+    created = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
+    review_id = created.json()["data"]["id"]
+
+    regenerated = await api_client.post(
+        f"/api/v1/reviews/{review_id}/regenerate",
+        headers=headers,
+        json={},
+    )
+
+    assert regenerated.status_code == 200
+    new_report = regenerated.json()["data"]
+    assert new_report["id"] != review_id
+    assert new_report["jobId"] == job_id
+    assert new_report["specId"] == spec_id
+
+
+async def test_review_optimize_creates_source_review_job_and_auto_review(
+    api_client: AsyncClient,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_codex = fake_bin / "codex"
+    fake_codex.write_text(
+        "#!/bin/sh\n"
+        "printf 'fake optimize codex received %s\\n' \"$*\"\n"
+        "printf '\\noptimize runner touched README\\n' >> README.md\n",
+        encoding="utf-8",
+    )
+    fake_codex.chmod(0o755)
+
+    monkeypatch.setenv("PATH", f"{fake_bin}:/usr/bin:/bin")
+    monkeypatch.setenv("AGENTPRO_RUNNER_EXECUTION_ENABLED", "true")
+    monkeypatch.setenv("AGENTPRO_RUNNER_WORKSPACE_ROOT", str(tmp_path / "runs"))
+    get_settings.cache_clear()
+
+    headers = await register_headers(api_client, "optimize@example.com")
+    spec_id = await create_owned_spec(api_client, headers)
+    job_response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "codex", "specId": spec_id},
+    )
+    job_id = job_response.json()["data"]["id"]
+    await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/events",
+        headers=headers,
+        json={"phase": "tests", "message": "pytest missing retry coverage", "progress": 60},
+    )
+    created = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
+    review_id = created.json()["data"]["id"]
+
+    optimize = await api_client.post(
+        f"/api/v1/reviews/{review_id}/optimize",
+        headers=headers,
+        json={},
+    )
+
+    assert optimize.status_code == 200
+    optimized_source = optimize.json()["data"]
+    optimization_job = optimized_source["optimizationJob"]
+    assert optimization_job["sourceReviewId"] == review_id
+    assert optimization_job["status"] == "running"
+
+    list_response = await api_client.get("/api/v1/reviews", headers=headers)
+    reports = list_response.json()["data"]
+    assert len(reports) == 2
+    newest = reports[0]
+    assert newest["id"] != review_id
+    assert newest["jobId"] == optimization_job["id"]
+
+    events_response = await api_client.get(
+        f"/api/v1/dev-jobs/{optimization_job['id']}/events",
+        headers=headers,
+    )
+    assert "sourceReviewId" in events_response.text
 
 
 async def test_review_rejects_other_users_spec(api_client: AsyncClient) -> None:

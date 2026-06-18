@@ -567,3 +567,36 @@
 - Commit：
   - 哈希：待提交
   - 信息：完成需求库垃圾篓与回收处理
+
+### 21. 异步真实开发执行与报告优化闭环
+- 状态：已完成
+- 完成功能：
+  - 新增 `POST /api/v1/dev-jobs/{id}/execute/async`，创建后台真实 Runner 执行任务
+  - 异步执行前立即写入 `running` 状态和 `execution.enqueue` 事件，前端可立即进入监控页
+  - `DevJobPayload` 新增 `sourceReviewId`，用于追踪从评审报告触发的优化任务
+  - 新增迁移 `20260618_0002_dev_job_source_review.py`，为 `dev_jobs` 添加 `source_review_id`
+  - Runner prompt 在优化任务中注入 `sourceReview` 上下文，包括原评分、摘要和 findings
+  - `GET /api/v1/reviews` 返回当前用户所有评审报告，按创建时间倒序
+  - `POST /api/v1/reviews/{id}/regenerate` 基于原 job/spec 重新生成评审报告
+  - `POST /api/v1/reviews/{id}/optimize` 基于现行评审创建后台优化任务，执行完成后自动生成新评审报告
+  - 测试环境通过 `app.state.db_session_factory` 让后台任务使用同一个内存数据库，避免误连真实库
+- 相关文件：
+  - backend/app/db/models.py
+  - backend/alembic/versions/20260618_0002_dev_job_source_review.py
+  - backend/app/modules/runner/router.py
+  - backend/app/modules/runner/executor.py
+  - backend/app/modules/runner/schemas.py
+  - backend/app/modules/review/router.py
+  - backend/app/modules/review/schemas.py
+  - backend/tests/conftest.py
+  - backend/tests/test_runner.py
+  - backend/tests/test_review.py
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_runner.py（9 passed）
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_review.py（6 passed）
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（56 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+- Commit：
+  - 哈希：待提交
+  - 信息：完成异步真实开发执行与报告优化闭环

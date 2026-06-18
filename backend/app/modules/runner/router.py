@@ -1,7 +1,8 @@
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import record_audit
 from app.core.responses import ok
 from app.db.models import AgentSpec, DevJob, DevJobArtifact, DevJobEvent, Requirement, User
-from app.db.session import get_db_session
+from app.db.session import async_session_factory, get_db_session
 from app.modules.auth.router import get_current_user
 from app.modules.runner.executor import execute_dev_job, runner_engines
 from app.modules.runner.schemas import (
@@ -25,6 +26,11 @@ from app.modules.runner.schemas import (
 router = APIRouter(prefix="/dev-jobs")
 db_session_dependency = Depends(get_db_session)
 current_user_dependency = Depends(get_current_user)
+TERMINAL_JOB_STATUSES = {"completed", "completed_with_warnings", "failed", "blocked"}
+
+
+def session_factory_for_request(request: Request):
+    return getattr(request.app.state, "db_session_factory", async_session_factory)
 
 
 def engines_for_strategy(strategy: str) -> list[str]:
@@ -40,6 +46,7 @@ def serialize_job(job: DevJob) -> DevJobPayload:
         strategy=job.strategy,
         requirementId=job.requirement_id,
         specId=job.spec_id,
+        sourceReviewId=job.source_review_id,
     )
 
 
@@ -112,6 +119,7 @@ async def create_dev_job(
         user_id=current_user.id,
         requirement_id=body.requirementId,
         spec_id=body.specId,
+        source_review_id=None,
         strategy=body.strategy,
         status="queued",
         progress=0,
@@ -154,6 +162,49 @@ async def execute_dev_job_endpoint(
         return ok(serialize_job(job))
     executed_job = await execute_dev_job(session, job)
     return ok(serialize_job(executed_job))
+
+
+async def execute_dev_job_background(job_id: str, session_factory: Callable):
+    async with session_factory() as session:
+        job = await session.get(DevJob, job_id)
+        if not job:
+            return
+        if job.status in TERMINAL_JOB_STATUSES:
+            return
+        await execute_dev_job(session, job)
+
+
+@router.post("/{job_id}/execute/async")
+async def execute_dev_job_async_endpoint(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    job = await get_owned_job(job_id, session, current_user)
+    if job.status in TERMINAL_JOB_STATUSES:
+        return ok(serialize_job(job))
+    if job.status != "running":
+        session.add(
+            DevJobEvent(
+                job_id=job.id,
+                level="info",
+                phase="execution.enqueue",
+                message="真实 Runner 已进入后台执行队列。",
+                payload={},
+            )
+        )
+        job.status = "running"
+        job.progress = max(job.progress, 1)
+        await session.commit()
+        await session.refresh(job)
+        background_tasks.add_task(
+            execute_dev_job_background,
+            job.id,
+            session_factory_for_request(request),
+        )
+    return ok(serialize_job(job))
 
 
 @router.post("/{job_id}/lease")

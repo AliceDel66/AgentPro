@@ -225,6 +225,9 @@ class DevJob(TimestampMixin, Base):
     spec_id: Mapped[str | None] = mapped_column(
         ForeignKey("agent_specs.id", ondelete="SET NULL"), index=True
     )
+    source_review_id: Mapped[str | None] = mapped_column(
+        ForeignKey("review_reports.id", ondelete="SET NULL"), index=True
+    )
     strategy: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="queued", index=True, nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
