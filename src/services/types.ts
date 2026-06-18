@@ -116,6 +116,8 @@ export interface RunnerEvent {
   phase: string;
   message: string;
   payload: Record<string, unknown>;
+  progress?: number | null;
+  status?: string | null;
   createdAt: string;
 }
 

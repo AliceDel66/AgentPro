@@ -624,5 +624,26 @@
   - 已通过 git diff --check
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：本提交
+  - 哈希：3742ee4
   - 信息：接入桌面端本机 Runner 执行
+
+### 23. Runner 事件进度回传增强
+- 状态：已完成
+- 完成功能：
+  - `POST /api/v1/dev-jobs/{id}/events` 会把请求体中的 `progress/status` 同步写入事件 payload，保留事件级进度证据
+  - `GET /api/v1/dev-jobs/{id}/events` 和 SSE stream 返回 `progress/status` 字段，前端可用事件兜底修正监控页显示
+  - 保持 DevJob 快照更新逻辑不变，继续由事件中的 `progress/status` 推进 `dev_jobs.progress/status`
+- 相关文件：
+  - backend/app/modules/runner/router.py
+  - backend/tests/test_runner.py
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_runner.py（10 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/runner backend/tests/test_runner.py
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，命中项均为文档说明或 `secretSaved` 类型字段，未发现真实密钥
+- Commit：
+  - 哈希：本提交
+  - 信息：修复 Runner 监控进度心跳显示

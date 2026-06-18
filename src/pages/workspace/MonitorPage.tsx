@@ -72,9 +72,11 @@ export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobS
     };
   }, [activeJobId, setActiveJobStatus]);
 
-  const progress = job?.progress ?? 0;
+  const eventProgress = latestEventProgress(events);
+  const progress = Math.max(clampProgress(job?.progress), eventProgress);
+  const displayStatus = displayJobStatus(job?.status, events, loading);
   const engines = job?.engines ?? [];
-  const canViewReview = Boolean(job?.status && TERMINAL_JOB_STATUSES.has(job.status));
+  const canViewReview = Boolean(displayStatus && TERMINAL_JOB_STATUSES.has(displayStatus));
 
   if (!activeJobId) {
     return (
@@ -111,7 +113,7 @@ export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobS
           </div>
           <div className="flex items-center gap-2">
             <span className={`h-2 w-2 rounded-full ${canViewReview ? "bg-agent-success" : "animate-pulse bg-agent-cyan"}`} />
-            <StatusChip tone={statusTone(job?.status)}>{statusLabel(job?.status ?? (loading ? "loading" : "queued"))}</StatusChip>
+            <StatusChip tone={statusTone(displayStatus)}>{statusLabel(displayStatus)}</StatusChip>
           </div>
         </div>
 
@@ -122,9 +124,10 @@ export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobS
           {engines.map((engine) => (
             <RunnerCard
               accent={engine === "claude-code" ? "claude" : "codex"}
-              badge={statusLabel(job?.status ?? "queued")}
+              badge={statusLabel(displayStatus)}
               key={engine}
               progress={progress}
+              status={displayStatus}
               title={engine === "claude-code" ? "Claude Code Runner" : "Codex Runner"}
             />
           ))}
@@ -205,8 +208,43 @@ function formatEventTime(value: string) {
   return time.toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function RunnerCard({ title, accent, badge, progress }: { title: string; accent: "codex" | "claude"; badge: string; progress: number }) {
+function latestEventProgress(events: RunnerEvent[]) {
+  return events.reduce((max, event) => {
+    const progress = typeof event.progress === "number"
+      ? event.progress
+      : typeof event.payload?.progress === "number"
+        ? event.payload.progress
+        : null;
+    return progress == null ? max : Math.max(max, clampProgress(progress));
+  }, 0);
+}
+
+function latestEventStatus(events: RunnerEvent[]) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    const status = typeof event.status === "string"
+      ? event.status
+      : typeof event.payload?.status === "string"
+        ? event.payload.status
+        : null;
+    if (status) return status;
+  }
+  return null;
+}
+
+function displayJobStatus(status: string | undefined, events: RunnerEvent[], loading: boolean) {
+  if (status && TERMINAL_JOB_STATUSES.has(status)) return status;
+  return latestEventStatus(events) ?? status ?? (loading ? "loading" : "queued");
+}
+
+function clampProgress(value: number | null | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
+function RunnerCard({ title, accent, badge, progress, status }: { title: string; accent: "codex" | "claude"; badge: string; progress: number; status: string }) {
   const brand = accent === "codex" ? { label: "Cx", bg: "bg-agent-ink", sub: "OpenAI Codex" } : { label: "Cl", bg: "bg-[#D97757]", sub: "Anthropic Claude" };
+  const isRunning = status === "running";
 
   return (
     <div className="overflow-hidden rounded-xl border border-agent-border bg-white">
@@ -231,7 +269,7 @@ function RunnerCard({ title, accent, badge, progress }: { title: string; accent:
         <div className="mb-[18px] grid gap-2.5">
           {runnerSteps.map((step, index) => {
             const done = progress >= (index + 1) * 20;
-            const active = !done && progress >= index * 20;
+            const active = isRunning && !done && progress >= index * 20;
             return (
               <div className="flex items-center gap-2 text-xs" key={step}>
                 {done ? (

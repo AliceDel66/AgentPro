@@ -760,5 +760,29 @@
   - 已通过 git diff --check
   - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
 - Commit：
-  - 哈希：本提交
+  - 哈希：3742ee4
   - 信息：接入桌面端本机 Runner 执行
+
+### 30. Runner 监控进度心跳与显示修复
+- 状态：已完成
+- 完成功能：
+  - 桌面端本机 Runner 在 Codex / Claude Code 长时间执行期间定期写入 `desktop.runner.progress` 心跳事件
+  - 监控页进度不再只依赖 DevJob 快照，而是综合 `job.progress` 与最新 Runner 事件中的 `progress/status`
+  - 当 Job 快照滞后但事件已经到达时，监控页会优先显示真实执行中状态，避免长时间停留在 0% / 等待执行
+  - Runner 卡片在 `queued` 状态下不再错误显示第一个步骤“进行中”
+- 相关文件：
+  - src/services/localRunnerService.ts
+  - src/services/types.ts
+  - src/pages/workspace/MonitorPage.tsx
+  - backend/app/modules/runner/router.py
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_runner.py（10 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/runner backend/tests/test_runner.py
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，命中项均为文档说明或 `secretSaved` 类型字段，未发现真实密钥
+- Commit：
+  - 哈希：本提交
+  - 信息：修复 Runner 监控进度心跳显示

@@ -282,12 +282,17 @@ async def append_dev_job_event(
     current_user: User = current_user_dependency,
 ):
     job = await get_owned_job(job_id, session, current_user)
+    payload = dict(body.payload)
+    if body.progress is not None:
+        payload["progress"] = body.progress
+    if body.status:
+        payload["status"] = body.status
     event = DevJobEvent(
         job_id=job.id,
         level=body.level,
         phase=body.phase,
         message=body.message,
-        payload=body.payload,
+        payload=payload,
     )
     session.add(event)
     if body.progress is not None:
@@ -347,6 +352,8 @@ async def list_dev_job_events(
                 "phase": event.phase,
                 "message": event.message,
                 "payload": event.payload,
+                "progress": event.payload.get("progress"),
+                "status": event.payload.get("status"),
                 "createdAt": event.created_at.isoformat(),
             }
             for event in result.scalars().all()
@@ -378,6 +385,8 @@ async def stream_dev_job(
                 "phase": event.phase,
                 "message": event.message,
                 "payload": event.payload,
+                "progress": event.payload.get("progress"),
+                "status": event.payload.get("status"),
                 "createdAt": event.created_at.isoformat(),
             }
             yield f"event: log\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"

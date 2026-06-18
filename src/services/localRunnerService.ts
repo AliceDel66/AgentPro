@@ -54,6 +54,25 @@ function engineLabel(engine: "codex" | "claude-code") {
   return engine === "claude-code" ? "Claude Code" : "Codex";
 }
 
+function startEngineHeartbeat(jobId: string, label: string, start: number, end: number) {
+  let tick = 0;
+  const maxProgress = Math.max(start, end - 5);
+  const step = Math.max(1, Math.floor((maxProgress - start) / 8));
+
+  return window.setInterval(() => {
+    tick += 1;
+    const progress = Math.min(maxProgress, start + tick * step);
+    void appendRunnerEvent(jobId, {
+      phase: "desktop.runner.progress",
+      message: `${label} CLI 仍在本机执行中，已保持任务心跳。`,
+      progress,
+      status: "running"
+    }).catch((error) => {
+      console.warn("[AgentPro] Runner 心跳上报失败", error);
+    });
+  }, 15000);
+}
+
 async function markBlocked(jobId: string, message: string) {
   await appendRunnerEvent(jobId, {
     phase: "desktop.runner.blocked",
@@ -101,12 +120,15 @@ async function executeEngine(
       payload: { path: detection.path ?? null }
     });
 
+    const heartbeat = startEngineHeartbeat(jobId, label, start, end);
     const result = await invoke<LocalRunnerResult>("execute_agent_runner", {
       engine,
       jobId,
       prompt: runnerPackage.prompt,
       repoPath: config.repoPath,
       workspaceRoot: config.workspaceRoot
+    }).finally(() => {
+      window.clearInterval(heartbeat);
     });
     const success = result.exitCode === 0;
 

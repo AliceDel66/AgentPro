@@ -88,7 +88,10 @@ async def test_runner_job_lease_event_and_artifact(api_client: AsyncClient) -> N
 
     events_response = await api_client.get(f"/api/v1/dev-jobs/{job['id']}/events", headers=headers)
     assert events_response.status_code == 200
-    assert events_response.json()["data"][0]["phase"] == "typecheck"
+    event = events_response.json()["data"][0]
+    assert event["phase"] == "typecheck"
+    assert event["progress"] == 45
+    assert event["status"] == "running"
 
     stream_response = await api_client.get(f"/api/v1/dev-jobs/{job['id']}/stream", headers=headers)
     assert stream_response.status_code == 200
