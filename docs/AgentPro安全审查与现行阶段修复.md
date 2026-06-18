@@ -98,7 +98,7 @@ def assert_safe_outbound_url(url: str) -> None:
 - **影响**：可对 `/auth/login` 做在线暴力破解。邮件验证码有 60s 冷却，但登录无任何限速。
 - **修复**：基于 Redis（项目已依赖 `redis`）做「IP+账号」滑动窗口限速与失败计数锁定；登录失败统一文案避免用户枚举。
 
-#### M2. 评审创建未校验 spec 归属（轻度 IDOR）
+#### M2. 评审创建未校验 spec 归属（轻度 IDOR）— ✅ 已修复（见 §三.4）
 - **位置**：`backend/app/modules/review/router.py:74-77`
 - **现象**：`job` 校验了 `job.user_id == current_user.id`，但 `spec = session.get(AgentSpec, body.specId)` **未**校验该 spec 是否属于当前用户，后续还读取 `spec.body.safetyReview` 影响评分。
 - **影响**：可通过猜测 specId 判断他人 spec 是否存在、间接读取其风险等级。
@@ -178,6 +178,10 @@ if spec:
   - 在 `fetch_openai_model_names` 与 `call_openai_chat_completion` 发起请求前调用；httpx 默认不跟随重定向，避免重定向绕过。
   - 残留风险：解析与连接之间存在 TOCTOU / DNS-rebinding 窗口，如需更强保证应固定已解析 IP 再连接（已在代码与本文档标注）。
   - 新增 `tests/test_net.py`（4 项），全套 **33/33 通过**。
+
+- **M2｜评审创建补 spec 归属校验**（`backend/app/modules/review/router.py`）
+  - `create_review` 中对 `specId` 经其 `requirement.user_id` 间接校验所属用户，跨用户引用返回 404，消除通过猜测 specId 探测他人 spec 的轻度越权。
+  - 新增 `tests/test_review.py::test_review_rejects_other_users_spec`，全套 **34/34 通过**。
 
 ---
 

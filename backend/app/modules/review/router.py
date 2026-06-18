@@ -8,6 +8,7 @@ from app.db.models import (
     DevJob,
     DevJobArtifact,
     DevJobEvent,
+    Requirement,
     ReviewFinding,
     ReviewReport,
     User,
@@ -75,6 +76,11 @@ async def create_review(
     spec = await session.get(AgentSpec, body.specId) if body.specId else None
     if job and job.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dev job not found")
+    if spec:
+        # A spec is owned transitively via its requirement; block cross-user references.
+        requirement = await session.get(Requirement, spec.requirement_id)
+        if not requirement or requirement.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AgentSpec not found")
     if not job and not spec:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="jobId or specId required"

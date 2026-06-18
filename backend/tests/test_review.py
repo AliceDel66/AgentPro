@@ -1,22 +1,24 @@
 from httpx import AsyncClient
 
 
-async def review_auth_headers(client: AsyncClient) -> dict[str, str]:
-    code_response = await client.post(
-        "/api/v1/auth/email-code", json={"email": "review@example.com"}
-    )
+async def register_headers(client: AsyncClient, email: str) -> dict[str, str]:
+    code_response = await client.post("/api/v1/auth/email-code", json={"email": email})
     code = code_response.json()["data"]["debugCode"]
     register_response = await client.post(
         "/api/v1/auth/register",
         json={
-            "email": "review@example.com",
+            "email": email,
             "code": code,
             "password": "Password123",
-            "name": "Review User",
+            "name": email.split("@")[0],
         },
     )
     token = register_response.json()["data"]["accessToken"]
     return {"Authorization": f"Bearer {token}"}
+
+
+async def review_auth_headers(client: AsyncClient) -> dict[str, str]:
+    return await register_headers(client, "review@example.com")
 
 
 async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
@@ -73,3 +75,23 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
     )
     assert rework_response.status_code == 200
     assert rework_response.json()["data"]["status"] == "rework_requested"
+
+
+async def test_review_rejects_other_users_spec(api_client: AsyncClient) -> None:
+    owner = await register_headers(api_client, "owner@example.com")
+    requirement_response = await api_client.post(
+        "/api/v1/requirements",
+        headers=owner,
+        json={"title": "客服 Agent", "initialMessage": "做一个处理售后退款的客服 agent"},
+    )
+    requirement_id = requirement_response.json()["data"]["id"]
+    spec_response = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/spec/generate", headers=owner
+    )
+    spec_id = spec_response.json()["data"]["id"]
+
+    attacker = await register_headers(api_client, "attacker@example.com")
+    response = await api_client.post(
+        "/api/v1/reviews", headers=attacker, json={"specId": spec_id}
+    )
+    assert response.status_code == 404
