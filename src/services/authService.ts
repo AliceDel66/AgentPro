@@ -20,11 +20,19 @@ export function loginWithPassword(identifier: string, password: string) {
   return apiPost("/auth/login", { identifier, password }, mockSession);
 }
 
-export function requestEmailCode(email: string) {
-  return apiPost<{ email: string; purpose: "register" }, EmailCodeResult>(
+export function requestEmailCode(email: string, purpose: "register" | "reset" = "register") {
+  return apiPost<{ email: string; purpose: "register" | "reset" }, EmailCodeResult>(
     "/auth/email-code",
-    { email, purpose: "register" },
+    { email, purpose },
     { sent: true, cooldownSeconds: 60 }
+  );
+}
+
+export function confirmPasswordReset(email: string, code: string, password: string) {
+  return apiPost<{ email: string; code: string; password: string }, { reset: boolean }>(
+    "/auth/password-reset/confirm",
+    { email, code, password },
+    { reset: true }
   );
 }
 

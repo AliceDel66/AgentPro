@@ -128,7 +128,7 @@ if spec:
 | --- | --- | --- | --- |
 | L1 | `backend/app/modules/runner/router.py:192`（`/stream`）| SSE 用 Authorization 头鉴权，浏览器 `EventSource` 无法带自定义头，前端实际无法消费 | 改为 query token 一次性票据，或用 fetch + ReadableStream |
 | L2 | `src/services/apiClient.ts` | access token 30 分钟过期后无自动刷新，`refreshSession` 未接入 | 在 `parseApiResponse` 401 时用 refresh token 自动续签并重放 |
-| L3 | `src/pages/auth/ForgotPasswordPage.tsx` | 页面未接任何 API，后端也无重置密码端点 | 见后续开发计划 P1 |
+| L3 | `src/pages/auth/ForgotPasswordPage.tsx` | 页面未接任何 API，后端也无重置密码端点 | ✅ 已修复（见 §三.5） |
 | L4 | `src/pages/workspace/SettingsPage.tsx:42-53` | 账号区为硬编码假数据（"张明…最后同步 3 分钟前"） | 接入 `/auth/me` 真实用户 |
 | L5 | `.gitignore` | 未忽略 `backend/*.db`，`agentpro_local.db` 处于未跟踪状态 | `.gitignore` 增加 `backend/*.db` |
 | L6 | `VITE_AGENTPRO_MOCK_API` | mock fallback 返回假用户/假会话，误开会掩盖真实错误 | 生产构建禁用并加显著告警 |
@@ -190,6 +190,13 @@ if spec:
   - 新增 `tests/test_auth.py` 两项（锁定与成功清零），全套 **36/36 通过**。
 
 > 至此 P0 中除 **C1（手动轮换凭据）** 外的代码项（H1/H2/H3/M1/M2/M3 + 配套）均已完成。
+
+### 5. P1 功能补全（持续落地，逐项提交）✅ 进行中
+
+- **L3｜找回密码闭环**（`backend/app/modules/auth/`、`src/pages/auth/ForgotPasswordPage.tsx`、`src/services/authService.ts`）
+  - 后端新增 `POST /auth/password-reset/confirm`：校验 `purpose="reset"` 验证码、更新密码哈希，并**吊销该用户全部有效刷新令牌**；发码复用 `/auth/email-code`。
+  - 前端 `ForgotPasswordPage` 从静态占位改为可用表单：邮箱 + 发送验证码（冷却 + spinner）、验证码、新密码/确认、前端校验、本地调试码自动填入，成功后跳登录。
+  - 新增 `tests/test_auth.py` 两项（重置成功改密 + 无效验证码 400），全套 **38/38 通过**。
 
 ---
 

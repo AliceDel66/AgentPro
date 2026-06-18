@@ -49,3 +49,13 @@ class AuthSession(BaseModel):
 
 class LogoutResponse(BaseModel):
     loggedOut: bool
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
+    password: str = Field(min_length=8)
+
+
+class PasswordResetResponse(BaseModel):
+    reset: bool

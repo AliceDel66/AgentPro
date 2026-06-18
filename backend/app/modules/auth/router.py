@@ -26,6 +26,8 @@ from app.modules.auth.schemas import (
     LoginRequest,
     LogoutRequest,
     LogoutResponse,
+    PasswordResetConfirmRequest,
+    PasswordResetResponse,
     RefreshRequest,
     RegisterRequest,
 )
@@ -176,6 +178,35 @@ async def register(body: RegisterRequest, session: AsyncSession = db_session_dep
     await session.flush()
     auth_session = await create_session_response(user, session)
     return ok(auth_session)
+
+
+@router.post("/password-reset/confirm")
+async def password_reset_confirm(
+    body: PasswordResetConfirmRequest,
+    session: AsyncSession = db_session_dependency,
+):
+    email = body.email.lower()
+    await consume_email_code(email, "reset", body.code, session)
+
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email code")
+
+    user.password_hash = hash_password(body.password)
+    # Revoke active refresh tokens so a leaked old session can't outlive the reset.
+    now = datetime.now(UTC)
+    tokens_result = await session.execute(
+        select(RefreshToken).where(
+            RefreshToken.user_id == user.id,
+            RefreshToken.revoked_at.is_(None),
+        )
+    )
+    for token in tokens_result.scalars().all():
+        token.revoked_at = now
+
+    await session.commit()
+    return ok(PasswordResetResponse(reset=True))
 
 
 @router.post("/login")

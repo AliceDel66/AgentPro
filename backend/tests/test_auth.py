@@ -77,6 +77,44 @@ async def test_register_rejects_invalid_code(api_client: AsyncClient) -> None:
     assert response.status_code == 400
 
 
+async def test_password_reset_flow(api_client: AsyncClient) -> None:
+    await register_user(api_client)  # alice@example.com / Password123
+
+    code_response = await api_client.post(
+        "/api/v1/auth/email-code",
+        json={"email": "alice@example.com", "purpose": "reset"},
+    )
+    reset_code = code_response.json()["data"]["debugCode"]
+    assert len(reset_code) == 6
+
+    confirm = await api_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"email": "alice@example.com", "code": reset_code, "password": "NewPassword456"},
+    )
+    assert confirm.status_code == 200
+    assert confirm.json()["data"]["reset"] is True
+
+    old_login = await api_client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "alice@example.com", "password": "Password123"},
+    )
+    assert old_login.status_code == 401
+    new_login = await api_client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "alice@example.com", "password": "NewPassword456"},
+    )
+    assert new_login.status_code == 200
+
+
+async def test_password_reset_rejects_invalid_code(api_client: AsyncClient) -> None:
+    await register_user(api_client)
+    response = await api_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"email": "alice@example.com", "code": "000000", "password": "NewPassword456"},
+    )
+    assert response.status_code == 400
+
+
 async def test_login_throttled_after_repeated_failures(api_client: AsyncClient) -> None:
     payload = {"identifier": "bruteforce@example.com", "password": "wrong-password"}
     statuses = []

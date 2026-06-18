@@ -53,9 +53,10 @@
 
 ## 四、P1 · 功能补全与一致性
 
-- [ ] **找回密码闭环**（对应 L3）
-  - 后端：复用 `email_verification_codes`（`purpose="reset"`），新增 `POST /auth/password-reset/request` 与 `POST /auth/password-reset/confirm`。
-  - 前端：`ForgotPasswordPage` 接入真实 API，加入验证码冷却与 loading（复用本轮组件）。
+- [x] **找回密码闭环**（对应 L3）✅
+  - 后端：复用 `/auth/email-code`（`purpose="reset"`）发码，新增 `POST /auth/password-reset/confirm`，重置后吊销该用户全部刷新令牌。
+  - 前端：`ForgotPasswordPage` 接入真实 API，含验证码冷却、loading、校验与本地调试码自动填入。
+  - 残留：发码接口对任意邮箱均会发送（与注册一致），用户枚举/防刷加固见 P3。
 - [ ] **设置页真实账号信息**（对应 L4）：接 `/auth/me`，展示真实用户名/邮箱/验证状态，移除「张明」等硬编码。
 - [ ] **Token 自动续期**（对应 L2）：`apiClient` 在 401 时用 refresh token 自动续签并重放原请求，失败再跳登录。
 - [ ] **令牌存储加固**（对应 M4）：Tauri 安全存储保存 refresh token，access token 仅驻内存。
