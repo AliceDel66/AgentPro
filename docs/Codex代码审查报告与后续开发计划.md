@@ -403,6 +403,17 @@ npm run build
 
 ### P2：登录态 bootstrap 与 route guard 不完整
 
+状态：已修复（Claude 实施）
+修复 commit：完善登录态恢复与全局用户状态同步
+验证：
+- npm run build
+关键改动：
+- `authService` 新增 `getAccessToken`/`clearAuthSession`，统一令牌读写。
+- `authStore` 新增 `bootstrap`：有 token 才拉 `/auth/me`；`refreshCurrentUser` 失败且 token 已失效时清空 user 与令牌（干净登出），网络类错误保留缓存用户并置 error。
+- `App.tsx` 启动执行 bootstrap（恢复期显示加载态）；登录态有效则默认进入 workspace；未登录访问 workspace 路由统一回退登录页。
+- 登录/注册成功即写入 authStore（`setSession`），刷新后仍保持登录。
+残余风险：路由为内存态，深链接/前进后退仍依赖单页 route 状态（非本次范围）。
+
 位置：
 
 - `src/App.tsx`

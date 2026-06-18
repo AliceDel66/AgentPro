@@ -44,9 +44,21 @@ export function registerWithEmail(email: string, code: string, password: string,
   return apiPost("/auth/register", { email, code, password, name }, mockSession);
 }
 
+const ACCESS_TOKEN_KEY = "agentpro.accessToken";
+const REFRESH_TOKEN_KEY = "agentpro.refreshToken";
+
 export function persistAuthSession(session: AuthSession) {
-  localStorage.setItem("agentpro.accessToken", session.accessToken);
-  localStorage.setItem("agentpro.refreshToken", session.refreshToken);
+  localStorage.setItem(ACCESS_TOKEN_KEY, session.accessToken);
+  localStorage.setItem(REFRESH_TOKEN_KEY, session.refreshToken);
+}
+
+export function getAccessToken(): string | null {
+  return globalThis.localStorage?.getItem(ACCESS_TOKEN_KEY) ?? null;
+}
+
+export function clearAuthSession(): void {
+  globalThis.localStorage?.removeItem(ACCESS_TOKEN_KEY);
+  globalThis.localStorage?.removeItem(REFRESH_TOKEN_KEY);
 }
 
 export function refreshSession(refreshToken: string) {

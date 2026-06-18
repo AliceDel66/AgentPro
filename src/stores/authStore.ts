@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { getCurrentUser } from "../services/authService";
+import { clearAuthSession, getAccessToken, getCurrentUser } from "../services/authService";
 import type { AuthSession, AuthUser } from "../services/types";
 
 type AuthStatus = "idle" | "loading" | "authenticated" | "anonymous" | "error";
@@ -12,6 +12,7 @@ interface AuthState {
   setSession: (session: AuthSession) => void;
   setUser: (user: AuthUser | null) => void;
   clearUser: () => void;
+  bootstrap: () => Promise<void>;
   refreshCurrentUser: () => Promise<AuthUser | null>;
 }
 
@@ -43,7 +44,17 @@ export const useAuthStore = create<AuthState>()(
         set({ user, status: user ? "authenticated" : "anonymous", error: null });
       },
       clearUser: () => {
+        clearAuthSession();
         set({ user: null, status: "anonymous", error: null });
+      },
+      bootstrap: async () => {
+        // No token at all => anonymous without a network round-trip.
+        if (!getAccessToken()) {
+          clearAuthSession();
+          set({ user: null, status: "anonymous", error: null });
+          return;
+        }
+        await useAuthStore.getState().refreshCurrentUser();
       },
       refreshCurrentUser: () => {
         if (currentUserRequest) return currentUserRequest;
@@ -55,6 +66,12 @@ export const useAuthStore = create<AuthState>()(
             return result.data;
           })
           .catch((error) => {
+            // If the token is gone (apiClient already tried and failed to refresh),
+            // treat as a clean logout; otherwise keep the cached user and flag the error.
+            if (!getAccessToken()) {
+              set({ user: null, status: "anonymous", error: null });
+              return null;
+            }
             const message = readErrorMessage(error, "读取账号信息失败");
             set({ status: "error", error: message });
             return null;
