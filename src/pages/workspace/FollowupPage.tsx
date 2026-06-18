@@ -128,7 +128,28 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
                   );
                 })
               ) : (
-                <div className="rounded-xl border border-agent-border bg-white p-[22px] text-sm text-agent-muted">当前没有待确认问题，可以直接生成 AgentSpec。</div>
+                <div className="rounded-xl border border-agent-border bg-white p-[22px]">
+                  <div className="text-sm font-semibold text-agent-ink">当前没有待确认问题</div>
+                  <div className="mt-1.5 text-[13px] leading-6 text-agent-muted">
+                    需求关键信息已较完整。可以直接生成 AgentSpec 草案，或返回访谈补充更多细节。
+                  </div>
+                  <div className="mt-4 flex gap-2.5">
+                    <button
+                      className="rounded-[10px] bg-agent-primary px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-agent-primaryHover"
+                      type="button"
+                      onClick={() => navigate("spec")}
+                    >
+                      生成 AgentSpec
+                    </button>
+                    <button
+                      className="rounded-[10px] bg-agent-pale px-4 py-2.5 text-[13px] font-semibold text-agent-primary hover:bg-agent-paleHover"
+                      type="button"
+                      onClick={() => navigate("chat")}
+                    >
+                      返回访谈
+                    </button>
+                  </div>
+                </div>
               )}
               {errorMessage ? <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
             </div>

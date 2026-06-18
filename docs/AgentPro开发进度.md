@@ -653,3 +653,24 @@
 - Commit：
   - 哈希：待提交
   - 信息：新增工作流阶段条与需求库下一步
+
+### 26. 访谈与反问体验合并（工作流方案阶段 3）
+- 状态：已完成
+- 完成功能：
+  - 新增 `FollowupQuestionCard` 组件，支持内联回答与“不适用”快捷操作
+  - ChatPage 将反问从只读列表改为对话流内可回答卡片组，底部“提交回答”仅提交已填写项，提交后用新 detail 刷新成熟度/待确认并对新助手回复做打字机动画
+  - 流式回复进行中隐藏反问卡片，避免与 token 流冲突
+  - 底部“回答反问”改为“批量确认”，仅在有待确认项时可用，跳转 FollowupPage 批量视图
+  - FollowupPage 空态升级为“生成 AgentSpec / 返回访谈”引导，不再显示无操作空页
+  - 修正 `confirmRequirementFollowups` 返回类型为 RequirementDetail
+- 相关文件：
+  - src/components/workflow/FollowupQuestionCard.tsx
+  - src/pages/workspace/ChatPage.tsx
+  - src/pages/workspace/FollowupPage.tsx
+  - src/services/agentSpecService.ts
+- 验证结果：
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：优化需求访谈与反问确认体验

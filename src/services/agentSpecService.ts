@@ -106,7 +106,7 @@ export function streamRequirementMessage(requirementId: string, content: string,
 }
 
 export function confirmRequirementFollowups(requirementId: string, decisions: Array<Record<string, unknown>>) {
-  return apiPost(`/requirements/${requirementId}/followups/confirm`, { decisions }, {
+  return apiPost<{ decisions: Array<Record<string, unknown>> }, RequirementDetail>(`/requirements/${requirementId}/followups/confirm`, { decisions }, {
     id: requirementId,
     title: "需求访谈",
     status: "ready_for_spec",

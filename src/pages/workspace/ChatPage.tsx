@@ -5,7 +5,8 @@ import { LoadingState } from "../../components/common/LoadingState";
 import { Spinner } from "../../components/common/Spinner";
 import { TypingIndicator } from "../../components/common/TypingIndicator";
 import { TypewriterText } from "../../components/common/Typewriter";
-import { getRequirementDetail, streamRequirementDraft, streamRequirementMessage } from "../../services/agentSpecService";
+import { FollowupQuestionCard } from "../../components/workflow/FollowupQuestionCard";
+import { confirmRequirementFollowups, getRequirementDetail, streamRequirementDraft, streamRequirementMessage } from "../../services/agentSpecService";
 import type { RequirementDetail } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -24,6 +25,10 @@ function questionText(question: Record<string, unknown>) {
   return String(question.question ?? question.title ?? question.key ?? "待确认问题");
 }
 
+function questionKey(question: Record<string, unknown>, index: number) {
+  return String(question.key ?? `question_${index + 1}`);
+}
+
 export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId }: ChatPageProps) {
   const [draft, setDraft] = useState("");
   const [detail, setDetail] = useState<RequirementDetail | null>(null);
@@ -32,6 +37,8 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState("");
   const [animateMessageId, setAnimateMessageId] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [confirming, setConfirming] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -54,6 +61,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     }
     // Switching to a different requirement: its history should render instantly, not animate.
     setAnimateMessageId(null);
+    setAnswers({});
 
     async function loadRequirement() {
       setLoading(true);
@@ -117,6 +125,32 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     }
   };
 
+  const answeredDecisions = pendingQuestions
+    .map((question, index) => {
+      const key = questionKey(question, index);
+      return { key, value: answers[key]?.trim() ?? "" };
+    })
+    .filter((item) => item.value)
+    .map((item) => ({ ...item, confirmed: true }));
+
+  const handleConfirmFollowups = async () => {
+    if (!activeRequirementId || confirming || !answeredDecisions.length) return;
+    setConfirming(true);
+    setErrorMessage(null);
+    try {
+      const result = await confirmRequirementFollowups(activeRequirementId, answeredDecisions);
+      setDetail(result.data);
+      const assistantMessages = result.data.messages.filter((message) => message.role === "assistant");
+      setAnimateMessageId(assistantMessages[assistantMessages.length - 1]?.id ?? null);
+      setAnswers({});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "提交回答失败";
+      setErrorMessage(message);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
       <RequirementSidebar activeRequirementId={activeRequirementId} navigate={navigate} setActiveRequirementId={setActiveRequirementId} />
@@ -168,18 +202,40 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
               </div>
             </div>
           ) : null}
-          {detail && pendingQuestions.length ? (
-            <div className="mb-5 ml-[46px] max-w-[560px] rounded-[10px] bg-[#F0F7FF] px-[18px] py-3.5">
-              <div className="mb-2 text-xs font-semibold tracking-[0.5px] text-agent-primary">还需要确认</div>
+          {detail && !sending && pendingQuestions.length ? (
+            <div className="mb-5 ml-[46px] max-w-[560px] rounded-[12px] bg-[#F0F7FF] p-[18px]">
+              <div className="mb-3 text-xs font-semibold tracking-[0.5px] text-agent-primary">
+                还需要确认（可直接在此回答，或点“批量确认”）
+              </div>
               <div className="grid gap-2.5">
-                {pendingQuestions.map((question, index) => (
-                  <div className="flex items-start gap-2.5" key={String(question.key ?? index)}>
-                    <span className="mt-0.5 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-agent-pale text-[11px] font-bold text-agent-primary">
-                      {index + 1}
-                    </span>
-                    <span className="text-[13px] leading-6 text-agent-secondary">{questionText(question)}</span>
-                  </div>
-                ))}
+                {pendingQuestions.map((question, index) => {
+                  const key = questionKey(question, index);
+                  return (
+                    <FollowupQuestionCard
+                      key={key}
+                      index={index}
+                      question={questionText(question)}
+                      reason={question.reason ? String(question.reason) : undefined}
+                      value={answers[key] ?? ""}
+                      disabled={confirming}
+                      onChange={(value) => setAnswers((current) => ({ ...current, [key]: value }))}
+                      onMarkNA={() => setAnswers((current) => ({ ...current, [key]: "不适用" }))}
+                    />
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-xs text-agent-muted">已填写 {answeredDecisions.length}/{pendingQuestions.length}</span>
+                <button
+                  className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-agent-primary px-4 py-2 text-[13px] font-semibold text-white hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:opacity-60"
+                  type="button"
+                  disabled={confirming || !answeredDecisions.length}
+                  aria-busy={confirming}
+                  onClick={() => void handleConfirmFollowups()}
+                >
+                  {confirming ? <Spinner size={14} className="text-white" /> : null}
+                  {confirming ? "提交中..." : "提交回答"}
+                </button>
               </div>
             </div>
           ) : null}
@@ -198,11 +254,12 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
             />
             <button
               className="h-[42px] shrink-0 rounded-[10px] bg-agent-pale px-[18px] text-[13px] font-medium text-agent-primary hover:bg-agent-paleHover disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={!detail}
+              disabled={!detail || !pendingQuestions.length}
+              title="打开批量确认视图"
               type="button"
               onClick={() => navigate("followup")}
             >
-              回答反问
+              批量确认
             </button>
             <button
               className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[10px] bg-agent-primary text-white hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:opacity-60"
