@@ -93,7 +93,7 @@ def assert_safe_outbound_url(url: str) -> None:
 
 ### 🟡 中（Medium）
 
-#### M1. 登录接口无频率限制 / 账户锁定
+#### M1. 登录接口无频率限制 / 账户锁定 — ✅ 已修复（见 §三.4）
 - **位置**：`backend/app/modules/auth/router.py:180-190`（`login`）
 - **影响**：可对 `/auth/login` 做在线暴力破解。邮件验证码有 60s 冷却，但登录无任何限速。
 - **修复**：基于 Redis（项目已依赖 `redis`）做「IP+账号」滑动窗口限速与失败计数锁定；登录失败统一文案避免用户枚举。
@@ -182,6 +182,14 @@ if spec:
 - **M2｜评审创建补 spec 归属校验**（`backend/app/modules/review/router.py`）
   - `create_review` 中对 `specId` 经其 `requirement.user_id` 间接校验所属用户，跨用户引用返回 404，消除通过猜测 specId 探测他人 spec 的轻度越权。
   - 新增 `tests/test_review.py::test_review_rejects_other_users_spec`，全套 **34/34 通过**。
+
+- **M1｜登录限速与失败锁定**（`backend/app/core/ratelimit.py`、`app/modules/auth/router.py`、`config.py`）
+  - 新增 `SlidingWindowLimiter`：按 `IP|账号` 计失败次数，默认 5 次/300 秒触发 429 锁定，登录成功即清零（合法用户偶尔输错不受影响）。
+  - 阈值可配置（`AGENTPRO_LOGIN_MAX_FAILURES` / `AGENTPRO_LOGIN_LOCK_SECONDS`）。
+  - 当前为**单实例内存实现**，适配桌面后端；多实例服务端需改用 Redis 共享窗口（见后续计划 P2/P3）。
+  - 新增 `tests/test_auth.py` 两项（锁定与成功清零），全套 **36/36 通过**。
+
+> 至此 P0 中除 **C1（手动轮换凭据）** 外的代码项（H1/H2/H3/M1/M2/M3 + 配套）均已完成。
 
 ---
 

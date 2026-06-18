@@ -1,11 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from jose import JWTError, jwt
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.ratelimit import get_login_rate_limiter
 from app.core.responses import ok
 from app.core.security import (
     create_access_token,
@@ -178,15 +179,30 @@ async def register(body: RegisterRequest, session: AsyncSession = db_session_dep
 
 
 @router.post("/login")
-async def login(body: LoginRequest, session: AsyncSession = db_session_dependency):
+async def login(
+    body: LoginRequest,
+    request: Request,
+    session: AsyncSession = db_session_dependency,
+):
     identifier = body.identifier.strip()
+    limiter = get_login_rate_limiter()
+    client_ip = request.client.host if request.client else "unknown"
+    throttle_key = f"{client_ip}|{identifier.lower()}"
+    if limiter.is_blocked(throttle_key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="登录尝试过于频繁，请稍后再试",
+        )
+
     result = await session.execute(
         select(User).where(or_(User.email == identifier.lower(), User.name == identifier))
     )
     user = result.scalars().first()
     if not user or not verify_password(body.password, user.password_hash):
+        limiter.record(throttle_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
+    limiter.reset(throttle_key)
     return ok(await create_session_response(user, session))
 
 

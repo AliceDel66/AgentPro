@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     secret_enc_key: str = ""
     access_token_minutes: int = 30
     refresh_token_days: int = 30
+    # Login brute-force throttle: max failed attempts per (ip, identifier) within the window.
+    login_max_failures: int = 5
+    login_lock_seconds: int = 300
     email_code_expire_minutes: int = 10
     email_code_cooldown_seconds: int = 60
     smtp_host: str = ""

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
+from app.core.ratelimit import get_login_rate_limiter
 from app.db import models  # noqa: F401
 from app.db.base import Base
 from app.db.session import get_db_session
@@ -26,6 +27,8 @@ def _hermetic_settings(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
     monkeypatch.setenv("AGENTPRO_SMTP_PASSWORD", "")
     monkeypatch.setenv("AGENTPRO_JWT_SECRET", "test-secret-not-for-production")
     get_settings.cache_clear()
+    # The login throttle is a process-global singleton; clear it so counts don't leak between tests.
+    get_login_rate_limiter().clear()
     yield
     get_settings.cache_clear()
 

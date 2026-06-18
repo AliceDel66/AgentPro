@@ -75,3 +75,26 @@ async def test_register_rejects_invalid_code(api_client: AsyncClient) -> None:
         },
     )
     assert response.status_code == 400
+
+
+async def test_login_throttled_after_repeated_failures(api_client: AsyncClient) -> None:
+    payload = {"identifier": "bruteforce@example.com", "password": "wrong-password"}
+    statuses = []
+    for _ in range(6):
+        response = await api_client.post("/api/v1/auth/login", json=payload)
+        statuses.append(response.status_code)
+    assert statuses[:5] == [401] * 5
+    assert statuses[5] == 429  # locked out after 5 failures within the window
+
+
+async def test_login_failure_counter_resets_on_success(api_client: AsyncClient) -> None:
+    await register_user(api_client)  # alice@example.com / Password123
+    wrong = {"identifier": "alice@example.com", "password": "nope"}
+    correct = {"identifier": "alice@example.com", "password": "Password123"}
+
+    for _ in range(4):
+        assert (await api_client.post("/api/v1/auth/login", json=wrong)).status_code == 401
+    assert (await api_client.post("/api/v1/auth/login", json=correct)).status_code == 200
+    # The success reset the counter, so subsequent attempts are not immediately locked.
+    for _ in range(4):
+        assert (await api_client.post("/api/v1/auth/login", json=wrong)).status_code == 401
