@@ -4,6 +4,7 @@ import { AuthLayout } from "../../components/layout/AuthLayout";
 import { Spinner } from "../../components/common/Spinner";
 import { TextField } from "../../components/common/TextField";
 import { persistAuthSession, registerWithEmail, requestEmailCode } from "../../services/authService";
+import { useAuthStore } from "../../stores/authStore";
 import type { Navigate } from "../../types";
 
 interface RegisterPageProps {
@@ -58,6 +59,7 @@ export function RegisterPage({ navigate }: RegisterPageProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sendingCode, setSendingCode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const setAuthSession = useAuthStore((state) => state.setSession);
 
   const trimmedEmail = email.trim();
   const trimmedName = name.trim();
@@ -132,6 +134,7 @@ export function RegisterPage({ navigate }: RegisterPageProps) {
     try {
       const result = await registerWithEmail(trimmedEmail, code, password, trimmedName);
       persistAuthSession(result.data);
+      setAuthSession(result.data);
       navigate("setup");
     } catch (error) {
       const message = error instanceof Error ? error.message : "注册失败，请稍后重试";

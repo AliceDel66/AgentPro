@@ -505,3 +505,34 @@
 - Commit：
   - 哈希：待提交
   - 信息：接入配置模型驱动的需求对话
+
+### 20. 全局用户状态同步
+- 状态：已完成
+- 完成功能：
+  - 引入 zustand 作为前端全局状态容器
+  - 新增 authStore，统一保存当前用户、账号同步状态和刷新当前用户的方法
+  - 登录成功后将 session.user 写入全局用户状态
+  - 注册成功后将 session.user 写入全局用户状态
+  - AppShell 顶部导航用户名、顶部头像和侧栏底部头像改为读取同一份用户状态
+  - 设置页账号信息改为读取同一份用户状态，并在进入页面时刷新 `/auth/me`
+  - 用户名缺失时统一回退到邮箱前缀，头像首字母统一由同一 helper 计算
+- 相关文件：
+  - package.json
+  - package-lock.json
+  - src/stores/authStore.ts
+  - src/components/layout/AppShell.tsx
+  - src/pages/auth/LoginPage.tsx
+  - src/pages/auth/RegisterPage.tsx
+  - src/pages/workspace/SettingsPage.tsx
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过内置浏览器冒烟验证：登录临时 QA 用户后进入工作台，页面可见 Coriander
+  - 已通过内置浏览器冒烟验证：设置页顶部栏显示 `C / Coriander`
+  - 已通过内置浏览器冒烟验证：设置页侧栏底部头像显示 `C`
+  - 已通过内置浏览器冒烟验证：设置页账号卡显示 `C / Coriander` 和邮箱
+  - 已确认内置浏览器控制台无 error/warn
+  - 临时 QA 用户已从测试数据库删除，未纳入代码改动
+- Commit：
+  - 哈希：待提交
+  - 信息：引入 zustand 同步用户状态

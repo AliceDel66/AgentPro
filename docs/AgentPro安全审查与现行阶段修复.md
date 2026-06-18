@@ -240,7 +240,7 @@ npm run typecheck && npm run build
 # 后端（在 backend/ 下）
 .venv/bin/python -m pytest -q
 
-# 凭据历史核查（应为空）
-git log --all -p -S "582018Mysql" --oneline
+# 凭据历史核查（应为空，替换为需要核查的敏感关键词）
+git log --all -p -S "REDACTED_DATABASE_PASSWORD" --oneline
 git log --all --full-history -- backend/.env
 ```

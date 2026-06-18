@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { BarChart3, Bell, BotMessageSquare, FileText, FolderOpen, Monitor, Play, Settings } from "lucide-react";
+import { getUserAvatarInitial, getUserDisplayName, useAuthStore } from "../../stores/authStore";
 import type { AppRoute, Navigate } from "../../types";
 
 interface AppShellProps {
@@ -35,6 +36,17 @@ function isActive(route: AppRoute, group?: readonly string[]) {
 
 export function AppShell({ route, navigate, children }: AppShellProps) {
   const title = pageTitles[route] ?? "AgentPro";
+  const user = useAuthStore((state) => state.user);
+  const authStatus = useAuthStore((state) => state.status);
+  const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser);
+  const displayName = getUserDisplayName(user);
+  const avatarInitial = getUserAvatarInitial(user);
+
+  useEffect(() => {
+    if (!user && authStatus === "idle") {
+      void refreshCurrentUser();
+    }
+  }, [authStatus, refreshCurrentUser, user]);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-agent-bg text-agent-ink">
@@ -82,7 +94,7 @@ export function AppShell({ route, navigate, children }: AppShellProps) {
           >
             <Settings size={20} />
           </button>
-          <div className="mt-1 grid h-[30px] w-[30px] place-items-center rounded-full bg-agent-primary text-[11px] font-semibold text-white">张</div>
+          <div className="mt-1 grid h-[30px] w-[30px] place-items-center rounded-full bg-agent-primary text-[11px] font-semibold text-white">{avatarInitial}</div>
         </div>
       </aside>
 
@@ -95,8 +107,8 @@ export function AppShell({ route, navigate, children }: AppShellProps) {
               <span className="absolute -right-0.5 -top-0.5 h-[7px] w-[7px] rounded-full border-[1.5px] border-white bg-agent-danger" />
             </button>
             <div className="flex items-center gap-2">
-              <div className="grid h-7 w-7 place-items-center rounded-full bg-agent-primary text-[11px] font-semibold text-white">张</div>
-              <span className="text-[13px] font-medium text-agent-secondary">张明</span>
+              <div className="grid h-7 w-7 place-items-center rounded-full bg-agent-primary text-[11px] font-semibold text-white">{avatarInitial}</div>
+              <span className="text-[13px] font-medium text-agent-secondary">{displayName}</span>
             </div>
           </div>
         </header>

@@ -3,9 +3,9 @@ import { CheckCircle2, Lock, Shield, TriangleAlert } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
-import { getCurrentUser } from "../../services/authService";
 import { getModelConfig } from "../../services/modelService";
-import type { AuthUser, ModelProviderConfig } from "../../services/types";
+import type { ModelProviderConfig } from "../../services/types";
+import { getUserAvatarInitial, getUserDisplayName, useAuthStore } from "../../stores/authStore";
 import type { Navigate } from "../../types";
 
 interface SettingsPageProps {
@@ -13,33 +13,21 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ navigate }: SettingsPageProps) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loadingUser, setLoadingUser] = useState(true);
-  const [userError, setUserError] = useState<string | null>(null);
   const [modelConfig, setModelConfig] = useState<ModelProviderConfig | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [loadingModel, setLoadingModel] = useState(true);
+  const user = useAuthStore((state) => state.user);
+  const authStatus = useAuthStore((state) => state.status);
+  const userError = useAuthStore((state) => state.error);
+  const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser);
+  const displayName = getUserDisplayName(user);
+  const avatarInitial = getUserAvatarInitial(user);
+  const loadingUser = authStatus === "loading" && !user;
+  const accountSyncMessage = authStatus === "loading" ? "正在同步账号数据..." : "账号数据已与后端同步";
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadUser() {
-      setLoadingUser(true);
-      try {
-        const result = await getCurrentUser();
-        if (!cancelled) setUser(result.data);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "读取账号信息失败";
-        if (!cancelled) setUserError(message);
-      } finally {
-        if (!cancelled) setLoadingUser(false);
-      }
-    }
-
-    void loadUser();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void refreshCurrentUser();
+  }, [refreshCurrentUser]);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,10 +62,10 @@ export function SettingsPage({ navigate }: SettingsPageProps) {
             <>
               <div className="mb-5 flex items-center gap-4">
                 <div className="grid h-12 w-12 place-items-center rounded-full bg-agent-primary text-lg font-semibold text-white">
-                  {(user?.name?.[0] ?? "U").toUpperCase()}
+                  {avatarInitial}
                 </div>
                 <div>
-                  <div className="text-[15px] font-semibold text-agent-ink">{user?.name ?? "未登录"}</div>
+                  <div className="text-[15px] font-semibold text-agent-ink">{displayName}</div>
                   <div className="text-[13px] text-agent-muted">{user?.email ?? "-"}</div>
                 </div>
                 <StatusChip className="ml-auto" tone={user?.emailVerified ? "green" : "gray"}>
@@ -89,7 +77,7 @@ export function SettingsPage({ navigate }: SettingsPageProps) {
               ) : (
                 <div className="flex items-center gap-3 rounded-[10px] bg-[#F8FAFC] px-[18px] py-3.5">
                   <CheckCircle2 size={16} className="text-agent-success" />
-                  <span className="text-[13px] text-agent-secondary">账号数据已与后端同步</span>
+                  <span className="text-[13px] text-agent-secondary">{accountSyncMessage}</span>
                 </div>
               )}
             </>

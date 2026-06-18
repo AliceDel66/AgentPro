@@ -4,6 +4,7 @@ import { Spinner } from "../../components/common/Spinner";
 import { TextField } from "../../components/common/TextField";
 import { loginWithPassword, persistAuthSession } from "../../services/authService";
 import { getModelConfig } from "../../services/modelService";
+import { useAuthStore } from "../../stores/authStore";
 import type { Navigate } from "../../types";
 
 interface LoginPageProps {
@@ -15,6 +16,7 @@ export function LoginPage({ navigate }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const setAuthSession = useAuthStore((state) => state.setSession);
 
   const handleLogin = async () => {
     setErrorMessage(null);
@@ -27,6 +29,7 @@ export function LoginPage({ navigate }: LoginPageProps) {
     try {
       const result = await loginWithPassword(identifier.trim(), password);
       persistAuthSession(result.data);
+      setAuthSession(result.data);
       const configResult = await getModelConfig();
       const hasSavedModelConfig = Boolean(configResult.data.secretSaved && configResult.data.model);
       navigate(hasSavedModelConfig ? "chat" : "setup");
