@@ -666,3 +666,31 @@
 - Commit：
   - 哈希：本提交
   - 信息：修复桌面 Runner 阻塞与离线兜底
+
+### 25. 评审报告结构化详情
+- 状态：已完成
+- 完成功能：
+  - `ReviewReportPayload` 新增 `scoreBreakdown`、`evidenceSources`、`actionPlan`、`deliveryAdvice`
+  - `analyze_review` 保持原有 summary/findings 兼容，同时从 DevJob events、artifacts、AgentSpec 和 findings 生成结构化详情
+  - 缺少 artifacts 或 test-report 时，报告会明确标记“证据不足”，并生成补齐证据的高优先级行动方案
+  - 报告详情、报告列表、latest、regenerate 返回统一完整结构
+  - 新增回归测试覆盖结构化详情字段、证据不足行动方案和报告列表详情字段
+- 相关文件：
+  - backend/app/modules/review/analyzer.py
+  - backend/app/modules/review/router.py
+  - backend/app/modules/review/schemas.py
+  - backend/tests/test_review.py
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_review.py（7 passed）
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（59 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 cargo fmt --check
+  - 已通过 cargo check（src-tauri）
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：本提交
+  - 信息：完善评审报告详情与优化方案页

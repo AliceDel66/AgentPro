@@ -136,5 +136,39 @@ export interface ReviewReport {
   status?: string;
   summary?: string;
   findings?: Array<Record<string, unknown>>;
+  scoreBreakdown?: ReviewScoreBreakdown[];
+  evidenceSources?: ReviewEvidenceSource[];
+  actionPlan?: ReviewActionPlanItem[];
+  deliveryAdvice?: string;
   optimizationJob?: RunnerJob | null;
+}
+
+export interface ReviewScoreBreakdown {
+  key: string;
+  label: string;
+  score: number;
+  reason: string;
+  evidenceCount: number;
+}
+
+export interface ReviewEvidenceSource {
+  id: string;
+  type: string;
+  engine?: string | null;
+  summary: string;
+  artifactId?: string | null;
+  eventId?: string | null;
+  uri?: string | null;
+  createdAt: string;
+}
+
+export interface ReviewActionPlanItem {
+  id: string;
+  priority: "high" | "medium" | "low";
+  title: string;
+  reason: string;
+  recommendedChange: string;
+  validationMethod: string;
+  sourceFindingIds: string[];
+  reworkRecommended: boolean;
 }

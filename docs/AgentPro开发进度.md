@@ -805,3 +805,35 @@
 - Commit：
   - 哈希：本提交
   - 信息：修复桌面 Runner 阻塞与离线兜底
+
+### 32. 评审报告详情与优化方案页
+- 状态：已完成
+- 完成功能：
+  - ReviewPage 从摘要页升级为四个 tab：总览、详细报告、证据链、优化方案
+  - 总览展示报告元信息、推荐方案、维度评分、交付建议和产物目录入口
+  - 详细报告展示功能完成度、需求一致性、稳定性、性能、幻觉风险、安全风险、测试覆盖等结构化评分理由
+  - 证据链展示 Runner events/artifacts 来源，并支持展开 finding 的 evidence JSON
+  - 优化方案展示可执行整改计划，并可直接创建基于当前报告的优化任务
+  - ReportsPage 卡片新增报告完整度、方案状态，并支持直达“查看详情”或“查看方案”
+  - Tauri 新增 `open_local_path` 命令，详情页可打开本机 Runner 产物目录
+- 相关文件：
+  - src/pages/workspace/ReviewPage.tsx
+  - src/pages/workspace/ReportsPage.tsx
+  - src/services/reviewService.ts
+  - src/services/localPathService.ts
+  - src/services/types.ts
+  - src/stores/workflowStore.ts
+  - src-tauri/src/lib.rs
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 cargo fmt --check
+  - 已通过 cargo check（src-tauri）
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（59 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：本提交
+  - 信息：完善评审报告详情与优化方案页

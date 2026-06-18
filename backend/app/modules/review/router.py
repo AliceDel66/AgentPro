@@ -16,7 +16,7 @@ from app.db.models import (
 )
 from app.db.session import get_db_session
 from app.modules.auth.router import get_current_user
-from app.modules.review.analyzer import analyze_review
+from app.modules.review.analyzer import analyze_review, build_review_details
 from app.modules.review.schemas import (
     ReviewActionResponse,
     ReviewCreate,
@@ -56,9 +56,10 @@ def serialize_finding(finding: ReviewFinding) -> ReviewFindingPayload:
 
 
 async def serialize_report(session: AsyncSession, report: ReviewReport) -> ReviewReportPayload:
-    result = await session.execute(
+    finding_result = await session.execute(
         select(ReviewFinding).where(ReviewFinding.review_id == report.id)
     )
+    findings = list(finding_result.scalars().all())
     job = await session.get(DevJob, report.job_id) if report.job_id else None
     spec = await session.get(AgentSpec, report.spec_id) if report.spec_id else None
     if not spec and job and job.spec_id:
@@ -71,6 +72,26 @@ async def serialize_report(session: AsyncSession, report: ReviewReport) -> Revie
         .order_by(DevJob.created_at.desc())
     )
     optimization_job = optimization_result.scalars().first()
+    event_result = (
+        await session.execute(select(DevJobEvent).where(DevJobEvent.job_id == job.id))
+        if job
+        else None
+    )
+    artifact_result = (
+        await session.execute(select(DevJobArtifact).where(DevJobArtifact.job_id == job.id))
+        if job
+        else None
+    )
+    details = build_review_details(
+        events=list(event_result.scalars().all()) if event_result else [],
+        artifacts=list(artifact_result.scalars().all()) if artifact_result else [],
+        spec=spec,
+        findings=findings,
+        score=report.score,
+        hallucination_risk=report.hallucination_risk,
+        stability_score=report.stability_score,
+        performance_score=report.performance_score,
+    )
     return ReviewReportPayload(
         id=report.id,
         status=report.status,
@@ -85,7 +106,11 @@ async def serialize_report(session: AsyncSession, report: ReviewReport) -> Revie
         stabilityScore=report.stability_score,
         performanceScore=report.performance_score,
         summary=report.summary,
-        findings=[serialize_finding(item) for item in result.scalars().all()],
+        findings=[serialize_finding(item) for item in findings],
+        scoreBreakdown=details["scoreBreakdown"],
+        evidenceSources=details["evidenceSources"],
+        actionPlan=details["actionPlan"],
+        deliveryAdvice=details["deliveryAdvice"],
         optimizationJob=serialize_job(optimization_job) if optimization_job else None,
     )
 

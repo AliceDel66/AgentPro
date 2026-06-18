@@ -96,10 +96,16 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
     assert review["score"] >= 80
     assert len(review["findings"]) == 4
     assert any(item["category"] == "test" for item in review["findings"])
+    assert len(review["scoreBreakdown"]) == 7
+    assert any(item["key"] == "test_coverage" for item in review["scoreBreakdown"])
+    assert any(item["type"] == "run-log" for item in review["evidenceSources"])
+    assert review["actionPlan"]
+    assert review["deliveryAdvice"]
 
     get_response = await api_client.get(f"/api/v1/reviews/{review['id']}", headers=headers)
     assert get_response.status_code == 200
     assert get_response.json()["data"]["id"] == review["id"]
+    assert get_response.json()["data"]["scoreBreakdown"][0]["reason"]
 
     accept_response = await api_client.post(
         f"/api/v1/reviews/{review['id']}/accept",
@@ -187,6 +193,35 @@ async def test_review_list_returns_only_current_user_reports(api_client: AsyncCl
     assert [item["id"] for item in reports] == [owner_review.json()["data"]["id"]]
     assert reports[0]["createdAt"]
     assert reports[0]["jobId"] == owner_job.json()["data"]["id"]
+    assert "scoreBreakdown" in reports[0]
+    assert "evidenceSources" in reports[0]
+    assert "actionPlan" in reports[0]
+    assert "deliveryAdvice" in reports[0]
+
+
+async def test_review_report_marks_evidence_gap_without_artifacts(
+    api_client: AsyncClient,
+) -> None:
+    headers = await register_headers(api_client, "evidence-gap@example.com")
+    spec_id = await create_owned_spec(api_client, headers)
+    job_response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "codex", "specId": spec_id},
+    )
+    job_id = job_response.json()["data"]["id"]
+
+    created = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
+
+    assert created.status_code == 200
+    report = created.json()["data"]
+    assert report["evidenceSources"] == []
+    assert any(item["id"] == "plan-evidence-gap" for item in report["actionPlan"])
+    assert any("证据不足" in item["reason"] for item in report["actionPlan"])
+    assert any(
+        item["key"] == "test_coverage" and "证据不足" in item["reason"]
+        for item in report["scoreBreakdown"]
+    )
 
 
 async def test_review_regenerate_creates_new_report_from_same_context(

@@ -7,11 +7,13 @@ interface WorkflowState {
   activeJobId: string | null;
   activeJobStatus: string | null;
   activeReviewId: string | null;
+  activeReviewTab: "overview" | "details" | "evidence" | "plan";
   setActiveRequirementId: (id: string | null) => void;
   setActiveSpecId: (id: string | null) => void;
   setActiveJobId: (id: string | null) => void;
   setActiveJobStatus: (status: string | null) => void;
   setActiveReviewId: (id: string | null) => void;
+  setActiveReviewTab: (tab: WorkflowState["activeReviewTab"]) => void;
   resetWorkflow: () => void;
 }
 
@@ -28,23 +30,25 @@ export const useWorkflowStore = create<WorkflowState>()(
       activeJobId: null,
       activeJobStatus: null,
       activeReviewId: null,
+      activeReviewTab: "overview",
       setActiveRequirementId: (id) =>
         set((state) =>
           id === state.activeRequirementId
             ? { activeRequirementId: id }
-            : { activeRequirementId: id, activeSpecId: null, activeJobId: null, activeJobStatus: null, activeReviewId: null }
+            : { activeRequirementId: id, activeSpecId: null, activeJobId: null, activeJobStatus: null, activeReviewId: null, activeReviewTab: "overview" }
         ),
       setActiveSpecId: (id) => set({ activeSpecId: id }),
       setActiveJobId: (id) =>
         set((state) =>
           id === state.activeJobId
             ? { activeJobId: id }
-            : { activeJobId: id, activeJobStatus: null, activeReviewId: null }
+            : { activeJobId: id, activeJobStatus: null, activeReviewId: null, activeReviewTab: "overview" }
         ),
       setActiveJobStatus: (status) => set({ activeJobStatus: status }),
       setActiveReviewId: (id) => set({ activeReviewId: id }),
+      setActiveReviewTab: (tab) => set({ activeReviewTab: tab }),
       resetWorkflow: () =>
-        set({ activeRequirementId: null, activeSpecId: null, activeJobId: null, activeJobStatus: null, activeReviewId: null })
+        set({ activeRequirementId: null, activeSpecId: null, activeJobId: null, activeJobStatus: null, activeReviewId: null, activeReviewTab: "overview" })
     }),
     {
       name: "agentpro.workflow",

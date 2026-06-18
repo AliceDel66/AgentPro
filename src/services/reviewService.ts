@@ -14,7 +14,39 @@ const mockReview: ReviewReport = {
   stabilityScore: 91,
   performanceScore: 85,
   status: "draft",
-  summary: "Mock 评审报告"
+  summary: "Mock 评审报告",
+  scoreBreakdown: [
+    { key: "functionality", label: "功能完成度", score: 88, reason: "已生成候选产物并包含基础执行记录。", evidenceCount: 2 },
+    { key: "requirement_match", label: "需求一致性", score: 84, reason: "AgentSpec 与候选产物基本一致。", evidenceCount: 1 },
+    { key: "stability", label: "稳定性", score: 91, reason: "未发现阻塞错误。", evidenceCount: 3 },
+    { key: "performance", label: "性能", score: 85, reason: "执行耗时处于可接受范围。", evidenceCount: 1 },
+    { key: "hallucination", label: "幻觉风险", score: 85, reason: "高风险动作较少。", evidenceCount: 1 },
+    { key: "security", label: "安全风险", score: 94, reason: "未发现明显敏感信息。", evidenceCount: 0 },
+    { key: "test_coverage", label: "测试覆盖", score: 82, reason: "识别到测试通过信号。", evidenceCount: 1 }
+  ],
+  evidenceSources: [
+    {
+      id: "artifact:mock-run-log",
+      type: "run-log",
+      engine: "claude-code",
+      summary: "本机 Runner 执行完成，测试通过。",
+      artifactId: "mock-run-log",
+      createdAt: new Date().toISOString()
+    }
+  ],
+  actionPlan: [
+    {
+      id: "plan-mock-1",
+      priority: "medium",
+      title: "补充边界场景测试",
+      reason: "当前候选产物仍缺少异常输入覆盖。",
+      recommendedChange: "补充失败路径、空输入和权限边界的自动化测试。",
+      validationMethod: "重新运行测试并重新生成评审报告。",
+      sourceFindingIds: [],
+      reworkRecommended: true
+    }
+  ],
+  deliveryAdvice: "当前产物适合作为候选版本保留，建议完成中优先级优化后再交付。"
 };
 
 export function getReviewReport(reviewId: string) {

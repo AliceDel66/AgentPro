@@ -58,6 +58,13 @@ class ReviewAnalysis:
     engine_scores: dict[str, int]
 
 
+def clip_text(value: str, limit: int = 180) -> str:
+    text = " ".join(value.split())
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1]}..."
+
+
 def clamp(value: int) -> int:
     return max(0, min(100, value))
 
@@ -120,6 +127,31 @@ def event_success_count(events: list[DevJobEvent]) -> int:
         or "通过" in event.message
         or "完成" in event.message
     )
+
+
+def event_engine(event: DevJobEvent) -> str | None:
+    payload = event.payload or {}
+    engine = payload.get("engine")
+    if isinstance(engine, str) and engine:
+        return engine
+    message = event.message.lower()
+    if "claude" in message:
+        return "claude-code"
+    if "codex" in message:
+        return "codex"
+    return None
+
+
+def has_test_evidence(
+    artifacts: list[DevJobArtifact], by_engine: dict[str, EngineEvidence]
+) -> bool:
+    return any(artifact.kind == "test-report" for artifact in artifacts) or any(
+        evidence.has_tests for evidence in by_engine.values()
+    )
+
+
+def security_hit_count(by_engine: dict[str, EngineEvidence]) -> int:
+    return sum(len(evidence.security_hits) for evidence in by_engine.values())
 
 
 def score_engine(evidence: EngineEvidence) -> int:
@@ -232,6 +264,285 @@ def build_findings(
         }
     )
     return findings
+
+
+def build_evidence_sources(
+    *, events: list[DevJobEvent], artifacts: list[DevJobArtifact]
+) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
+    for event in events:
+        sources.append(
+            {
+                "id": f"event:{event.id}",
+                "type": "event",
+                "engine": event_engine(event),
+                "summary": clip_text(event.message or event.phase),
+                "artifactId": None,
+                "eventId": event.id,
+                "uri": None,
+                "createdAt": event.created_at.isoformat(),
+            }
+        )
+    for artifact in artifacts:
+        payload = artifact.payload or {}
+        payload_summary = payload_text(payload)
+        sources.append(
+            {
+                "id": f"artifact:{artifact.id}",
+                "type": artifact.kind,
+                "engine": artifact.engine,
+                "summary": clip_text(artifact.summary or payload_summary or artifact.kind),
+                "artifactId": artifact.id,
+                "eventId": None,
+                "uri": artifact.uri,
+                "createdAt": artifact.created_at.isoformat(),
+            }
+        )
+    return sources
+
+
+def build_score_breakdown(
+    *,
+    score: int,
+    hallucination_risk: int,
+    stability_score: int,
+    performance_score: int,
+    artifacts: list[DevJobArtifact],
+    events: list[DevJobEvent],
+    by_engine: dict[str, EngineEvidence],
+    spec: AgentSpec | None,
+) -> list[dict[str, Any]]:
+    has_artifacts = bool(artifacts)
+    has_tests = has_test_evidence(artifacts, by_engine)
+    has_diff = any(evidence.has_diff for evidence in by_engine.values())
+    errors = event_error_count(events)
+    successes = event_success_count(events)
+    open_questions_count = 0
+    if spec:
+        open_questions = (spec.body or {}).get("openQuestions")
+        if isinstance(open_questions, list):
+            open_questions_count = len(open_questions)
+    security_hits = security_hit_count(by_engine)
+
+    return [
+        {
+            "key": "functionality",
+            "label": "功能完成度",
+            "score": clamp(score if has_artifacts else min(score, 55)),
+            "reason": (
+                "已识别到开发产物、执行日志和代码 diff，具备基础完成度证据。"
+                if has_artifacts and has_diff
+                else "当前缺少可验证开发产物或代码 diff，只能给出保守初评。"
+            ),
+            "evidenceCount": len(artifacts),
+        },
+        {
+            "key": "requirement_match",
+            "label": "需求一致性",
+            "score": clamp(100 - hallucination_risk),
+            "reason": (
+                "AgentSpec 未确认项较少，需求一致性风险可控。"
+                if open_questions_count == 0
+                else f"AgentSpec 仍有 {open_questions_count} 个未确认项，需人工复核。"
+            ),
+            "evidenceCount": 1 if spec else 0,
+        },
+        {
+            "key": "stability",
+            "label": "稳定性",
+            "score": stability_score,
+            "reason": (
+                "Runner 事件未发现阻塞错误。"
+                if errors == 0
+                else f"Runner 事件包含 {errors} 个错误，需要返工确认。"
+            ),
+            "evidenceCount": len(events),
+        },
+        {
+            "key": "performance",
+            "label": "性能",
+            "score": performance_score,
+            "reason": (
+                "执行耗时未出现明显异常。"
+                if performance_score >= 75
+                else "执行耗时偏高，需要关注实现复杂度和测试耗时。"
+            ),
+            "evidenceCount": len(
+                [event for event in events if "duration" in payload_text(event.payload)]
+            ),
+        },
+        {
+            "key": "hallucination",
+            "label": "幻觉风险",
+            "score": clamp(100 - hallucination_risk),
+            "reason": (
+                "当前结构化风险较低。"
+                if hallucination_risk < 45
+                else "存在未确认需求或高风险动作，不能直接信任生成产物。"
+            ),
+            "evidenceCount": 1 if spec else 0,
+        },
+        {
+            "key": "security",
+            "label": "安全风险",
+            "score": clamp(100 - security_hits * 30),
+            "reason": (
+                "未在 Runner 产物中发现明显敏感字段。"
+                if security_hits == 0
+                else f"发现 {security_hits} 条疑似安全或敏感信息信号。"
+            ),
+            "evidenceCount": security_hits,
+        },
+        {
+            "key": "test_coverage",
+            "label": "测试覆盖",
+            "score": 88 if has_tests else 42,
+            "reason": (
+                f"已识别到测试通过信号或 test-report，成功事件 {successes} 条。"
+                if has_tests
+                else "缺少 test-report 或可解析测试通过信号，当前结论证据不足。"
+            ),
+            "evidenceCount": len(
+                [artifact for artifact in artifacts if artifact.kind == "test-report"]
+            ),
+        },
+    ]
+
+
+def action_text_for_category(category: str) -> tuple[str, str]:
+    if category == "stability":
+        return (
+            "复现 Runner 错误事件，修复导致任务失败或阻塞的代码路径。",
+            "重新运行本地 Runner，并确认监控页最终状态为 completed 或 completed_with_warnings。",
+        )
+    if category == "test":
+        return (
+            "补充可自动执行的测试命令和测试报告输出，确保报告能解析到通过/失败信号。",
+            "重新生成评审报告，确认测试覆盖维度不再显示证据不足。",
+        )
+    if category == "security":
+        return (
+            "检查 diff、日志和配置样例，移除 API Key、密码、token 等敏感信息。",
+            "运行敏感信息扫描，并确认评审证据链中无高风险命中。",
+        )
+    if category == "hallucination":
+        return (
+            "回到 AgentSpec 或需求访谈补齐未确认项，明确权限边界、失败处理和验收标准。",
+            "人工确认关键需求后重新开发或重新评审。",
+        )
+    return (
+        "按该发现补齐实现、文档或验证证据。",
+        "重新运行相关测试并重新生成评审报告。",
+    )
+
+
+def build_action_plan(
+    *, findings: list[Any], artifacts: list[DevJobArtifact], by_engine: dict[str, EngineEvidence]
+) -> list[dict[str, Any]]:
+    plan: list[dict[str, Any]] = []
+    severity_rank = {"high": 0, "medium": 1, "low": 2}
+    sorted_findings = sorted(
+        findings,
+        key=lambda item: severity_rank.get(str(getattr(item, "severity", "")).lower(), 3),
+    )
+    for index, finding in enumerate(sorted_findings, start=1):
+        severity = str(getattr(finding, "severity", "low")).lower()
+        category = str(getattr(finding, "category", "general"))
+        recommended_change, validation_method = action_text_for_category(category)
+        priority = "high" if severity == "high" else "medium" if severity == "medium" else "low"
+        plan.append(
+            {
+                "id": f"plan-{index}",
+                "priority": priority,
+                "title": f"处理：{getattr(finding, 'title', '评审发现')}",
+                "reason": getattr(finding, "detail", ""),
+                "recommendedChange": recommended_change,
+                "validationMethod": validation_method,
+                "sourceFindingIds": [getattr(finding, "id", "")],
+                "reworkRecommended": priority in {"high", "medium"},
+            }
+        )
+
+    if not artifacts or not has_test_evidence(artifacts, by_engine):
+        plan.insert(
+            0,
+            {
+                "id": "plan-evidence-gap",
+                "priority": "high",
+                "title": "补齐评审证据",
+                "reason": (
+                    "当前报告缺少开发产物或 test-report，存在证据不足，结论只能作为保守初评。"
+                ),
+                "recommendedChange": (
+                    "重新执行本机 Runner，并确保上传 run-log、diff-summary 和 test-report。"
+                ),
+                "validationMethod": (
+                    "报告详情页的证据链至少包含 run-log、diff-summary 和 test-report。"
+                ),
+                "sourceFindingIds": [
+                    getattr(finding, "id", "")
+                    for finding in findings
+                    if str(getattr(finding, "category", "")) == "test"
+                ],
+                "reworkRecommended": True,
+            },
+        )
+    return plan
+
+
+def build_delivery_advice(
+    *,
+    score: int,
+    hallucination_risk: int,
+    artifacts: list[DevJobArtifact],
+    action_plan: list[dict[str, Any]],
+) -> str:
+    high_priority = any(item["priority"] == "high" for item in action_plan)
+    if not artifacts:
+        return "当前缺少可审查产物，建议先完成真实 Runner 执行并重新生成评审报告。"
+    if high_priority or hallucination_risk >= 45:
+        return "当前不建议直接交付给最终用户，应先按优化方案返工，再重新生成评审报告。"
+    if score >= 85:
+        return "当前产物具备内部试用条件，可进入 Agent 成品库或交付集成文档准备阶段。"
+    return "当前产物可作为候选版本保留，建议完成中优先级优化后再交付。"
+
+
+def build_review_details(
+    *,
+    events: list[DevJobEvent],
+    artifacts: list[DevJobArtifact],
+    spec: AgentSpec | None,
+    findings: list[Any],
+    score: int,
+    hallucination_risk: int,
+    stability_score: int,
+    performance_score: int,
+) -> dict[str, Any]:
+    by_engine = evidence_for_artifacts(artifacts)
+    if not by_engine:
+        by_engine = {"codex": EngineEvidence(engine="codex")}
+    score_breakdown = build_score_breakdown(
+        score=score,
+        hallucination_risk=hallucination_risk,
+        stability_score=stability_score,
+        performance_score=performance_score,
+        artifacts=artifacts,
+        events=events,
+        by_engine=by_engine,
+        spec=spec,
+    )
+    action_plan = build_action_plan(findings=findings, artifacts=artifacts, by_engine=by_engine)
+    return {
+        "scoreBreakdown": score_breakdown,
+        "evidenceSources": build_evidence_sources(events=events, artifacts=artifacts),
+        "actionPlan": action_plan,
+        "deliveryAdvice": build_delivery_advice(
+            score=score,
+            hallucination_risk=hallucination_risk,
+            artifacts=artifacts,
+            action_plan=action_plan,
+        ),
+    }
 
 
 def analyze_review(

@@ -237,6 +237,23 @@ fn detect_agent_cli(engine: String) -> Result<CliDetection, String> {
 }
 
 #[tauri::command]
+fn open_local_path(path: String) -> Result<(), String> {
+    let safe = PathBuf::from(safe_path(&path)?);
+    if !safe.exists() {
+        return Err("路径不存在，可能产物目录已被清理。".to_string());
+    }
+    let status = Command::new("open")
+        .arg(&safe)
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("打开路径失败，退出码：{}", status))
+    }
+}
+
+#[tauri::command]
 fn build_agent_runner_command(
     engine: String,
     prompt_path: String,
@@ -346,6 +363,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             detect_agent_cli,
+            open_local_path,
             build_agent_runner_command,
             start_agent_runner,
             execute_agent_runner

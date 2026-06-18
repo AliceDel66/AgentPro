@@ -31,11 +31,13 @@ export default function App() {
   const activeJobId = useWorkflowStore((state) => state.activeJobId);
   const activeJobStatus = useWorkflowStore((state) => state.activeJobStatus);
   const activeReviewId = useWorkflowStore((state) => state.activeReviewId);
+  const activeReviewTab = useWorkflowStore((state) => state.activeReviewTab);
   const setActiveRequirementId = useWorkflowStore((state) => state.setActiveRequirementId);
   const setActiveSpecId = useWorkflowStore((state) => state.setActiveSpecId);
   const setActiveJobId = useWorkflowStore((state) => state.setActiveJobId);
   const setActiveJobStatus = useWorkflowStore((state) => state.setActiveJobStatus);
   const setActiveReviewId = useWorkflowStore((state) => state.setActiveReviewId);
+  const setActiveReviewTab = useWorkflowStore((state) => state.setActiveReviewTab);
 
   const status = useAuthStore((state) => state.status);
   const bootstrap = useAuthStore((state) => state.bootstrap);
@@ -111,13 +113,24 @@ export default function App() {
       ) : route === "monitor" ? (
         <MonitorPage activeJobId={activeJobId} activeSpecId={activeSpecId} navigate={guardedNavigate} setActiveJobStatus={setActiveJobStatus} />
       ) : route === "review" ? (
-        <ReviewPage activeJobId={activeJobId} activeReviewId={activeReviewId} activeSpecId={activeSpecId} navigate={guardedNavigate} setActiveReviewId={setActiveReviewId} />
+        <ReviewPage
+          activeJobId={activeJobId}
+          activeReviewId={activeReviewId}
+          activeReviewTab={activeReviewTab}
+          activeSpecId={activeSpecId}
+          navigate={guardedNavigate}
+          setActiveJobId={setActiveJobId}
+          setActiveJobStatus={setActiveJobStatus}
+          setActiveReviewId={setActiveReviewId}
+          setActiveReviewTab={setActiveReviewTab}
+        />
       ) : route === "reports" ? (
         <ReportsPage
           navigate={guardedNavigate}
           setActiveJobId={setActiveJobId}
           setActiveJobStatus={setActiveJobStatus}
           setActiveReviewId={setActiveReviewId}
+          setActiveReviewTab={setActiveReviewTab}
         />
       ) : route === "settings" ? (
         <SettingsPage navigate={guardedNavigate} />

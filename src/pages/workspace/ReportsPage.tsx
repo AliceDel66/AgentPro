@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, Eye, RefreshCcw, WandSparkles } from "lucide-react";
+import { Archive, ClipboardList, Eye, RefreshCcw, WandSparkles } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
@@ -14,11 +14,12 @@ interface ReportsPageProps {
   setActiveJobId: (jobId: string | null) => void;
   setActiveJobStatus: (status: string | null) => void;
   setActiveReviewId: (reviewId: string | null) => void;
+  setActiveReviewTab: (tab: "overview" | "details" | "evidence" | "plan") => void;
 }
 
 type ReportAction = { type: "regenerate" | "optimize"; id: string } | null;
 
-export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setActiveReviewId }: ReportsPageProps) {
+export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setActiveReviewId, setActiveReviewTab }: ReportsPageProps) {
   const [reports, setReports] = useState<ReviewReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -53,10 +54,11 @@ export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setA
     return () => window.clearInterval(timer);
   }, [hasActiveOptimization, loadReports]);
 
-  const openReport = (report: ReviewReport) => {
+  const openReport = (report: ReviewReport, tab: "overview" | "details" | "evidence" | "plan" = "overview") => {
     setActiveJobId(report.jobId ?? null);
     setActiveJobStatus(report.jobId ? "completed" : null);
     setActiveReviewId(report.id);
+    setActiveReviewTab(tab);
     navigate("review");
   };
 
@@ -148,6 +150,7 @@ export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setA
                 key={report.id}
                 report={report}
                 onOpen={() => openReport(report)}
+                onOpenPlan={() => openReport(report, "plan")}
                 onOptimize={() => void handleOptimize(report)}
                 onRegenerate={() => void handleRegenerate(report)}
               />
@@ -163,18 +166,22 @@ function ReportCard({
   report,
   action,
   onOpen,
+  onOpenPlan,
   onRegenerate,
   onOptimize
 }: {
   report: ReviewReport;
   action: ReportAction;
   onOpen: () => void;
+  onOpenPlan: () => void;
   onRegenerate: () => void;
   onOptimize: () => void;
 }) {
   const optimizationRunning = Boolean(report.optimizationJob && !TERMINAL_JOB_STATUSES.has(report.optimizationJob.status));
   const regenerating = action?.type === "regenerate" && action.id === report.id;
   const optimizing = action?.type === "optimize" && action.id === report.id;
+  const completeness = reportCompleteness(report);
+  const hasActionPlan = Boolean(report.actionPlan?.length);
 
   return (
     <div className="rounded-xl border border-agent-border bg-white p-5">
@@ -206,6 +213,28 @@ function ReportCard({
         {report.summary ?? "暂无摘要。"}
       </div>
 
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="rounded-[10px] bg-[#F8FAFC] px-4 py-3">
+          <div className="text-[12px] font-semibold text-agent-ink">报告完整度</div>
+          <div className="mt-1.5 flex flex-wrap gap-2 text-[11px]">
+            {completeness.map((item) => (
+              <span
+                className={`rounded-full px-2.5 py-1 font-semibold ${item.done ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-agent-muted"}`}
+                key={item.label}
+              >
+                {item.done ? "已包含" : "缺少"}：{item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-[10px] bg-[#F8FAFC] px-4 py-3">
+          <div className="text-[12px] font-semibold text-agent-ink">方案状态</div>
+          <div className="mt-1.5 text-[13px] leading-6 text-agent-secondary">
+            {hasActionPlan ? `已生成 ${report.actionPlan?.length ?? 0} 条可执行优化方案` : "旧版报告暂未包含优化方案，建议重新生成完整报告。"}
+          </div>
+        </div>
+      </div>
+
       {report.optimizationJob ? (
         <div className="mt-3 rounded-[10px] bg-[#F0F7FF] px-4 py-3 text-[12px] leading-6 text-agent-secondary">
           最新优化任务：{report.optimizationJob.id} · {optimizationLabel(report.optimizationJob)} · 进度 {report.optimizationJob.progress}%
@@ -216,6 +245,10 @@ function ReportCard({
         <AppButton type="button" variant="ghost" onClick={onOpen}>
           <Eye size={16} />
           查看详情
+        </AppButton>
+        <AppButton type="button" variant="ghost" onClick={onOpenPlan}>
+          <ClipboardList size={16} />
+          查看方案
         </AppButton>
         <AppButton disabled={Boolean(action)} loading={regenerating} type="button" variant="secondary" onClick={onRegenerate}>
           <RefreshCcw size={16} />
@@ -228,6 +261,14 @@ function ReportCard({
       </div>
     </div>
   );
+}
+
+function reportCompleteness(report: ReviewReport) {
+  return [
+    { label: "详细报告", done: Boolean(report.scoreBreakdown?.length) },
+    { label: "证据链", done: Boolean(report.evidenceSources?.length) },
+    { label: "优化方案", done: Boolean(report.actionPlan?.length) }
+  ];
 }
 
 function reviewStatusLabel(status?: string) {
