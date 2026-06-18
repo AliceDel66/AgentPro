@@ -12,6 +12,10 @@ export function startRunnerJob(request: RunnerRequest) {
   return apiPost("/dev-jobs", request, mockJob);
 }
 
+export function executeRunnerJob(jobId: string) {
+  return apiPost(`/dev-jobs/${jobId}/execute`, {}, mockJob);
+}
+
 export function getRunnerJob(jobId: string) {
   return apiGet(`/dev-jobs/${jobId}`, mockJob);
 }

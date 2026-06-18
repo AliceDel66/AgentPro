@@ -536,3 +536,24 @@
 - Commit：
   - 哈希：待提交
   - 信息：引入 zustand 同步用户状态
+
+### 21. P2 真实 Runner 执行入口
+- 状态：已完成
+- 完成功能：
+  - 开发调度页创建 DevJob 后立即调用 `/dev-jobs/{id}/execute`
+  - 按用户选择的 Codex、Claude Code 或并行策略启动后端真实 Runner 执行层
+  - 按钮文案由“开始并行开发”调整为“开始真实开发”
+  - 页面说明改为创建开发任务并启动本地真实 Runner 执行
+  - runnerService 新增 executeRunnerJob，用于触发后端执行接口
+- 相关文件：
+  - src/pages/workspace/DispatchPage.tsx
+  - src/services/runnerService.ts
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_runner.py
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/runner backend/tests/test_runner.py backend/app/core/config.py
+- Commit：
+  - 哈希：待提交
+  - 信息：落地真实 Runner 执行层

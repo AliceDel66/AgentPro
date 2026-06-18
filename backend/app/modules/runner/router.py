@@ -11,6 +11,7 @@ from app.core.responses import ok
 from app.db.models import DevJob, DevJobArtifact, DevJobEvent, User
 from app.db.session import get_db_session
 from app.modules.auth.router import get_current_user
+from app.modules.runner.executor import execute_dev_job, runner_engines
 from app.modules.runner.schemas import (
     DevJobArtifactCreate,
     DevJobArtifactPayload,
@@ -27,9 +28,7 @@ current_user_dependency = Depends(get_current_user)
 
 
 def engines_for_strategy(strategy: str) -> list[str]:
-    if strategy == "parallel":
-        return ["codex", "claude-code"]
-    return [strategy]
+    return runner_engines(strategy)
 
 
 def serialize_job(job: DevJob) -> DevJobPayload:
@@ -90,6 +89,19 @@ async def get_dev_job(
     current_user: User = current_user_dependency,
 ):
     return ok(serialize_job(await get_owned_job(job_id, session, current_user)))
+
+
+@router.post("/{job_id}/execute")
+async def execute_dev_job_endpoint(
+    job_id: str,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    job = await get_owned_job(job_id, session, current_user)
+    if job.status not in {"queued", "failed", "blocked", "running"}:
+        return ok(serialize_job(job))
+    executed_job = await execute_dev_job(session, job)
+    return ok(serialize_job(executed_job))
 
 
 @router.post("/{job_id}/lease")

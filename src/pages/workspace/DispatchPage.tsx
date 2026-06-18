@@ -2,7 +2,7 @@ import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { StatusChip } from "../../components/common/StatusChip";
-import { startRunnerJob } from "../../services/runnerService";
+import { executeRunnerJob, startRunnerJob } from "../../services/runnerService";
 import type { RunnerRequest } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -43,7 +43,8 @@ export function DispatchPage({ activeRequirementId, activeSpecId, navigate, setA
         specId: activeSpecId ?? undefined,
         requirementId: activeRequirementId ?? undefined
       });
-      setActiveJobId(result.data.id);
+      const executeResult = await executeRunnerJob(result.data.id);
+      setActiveJobId(executeResult.data.id);
       navigate("monitor");
     } catch (error) {
       const message = error instanceof Error ? error.message : "创建开发任务失败";
@@ -57,7 +58,7 @@ export function DispatchPage({ activeRequirementId, activeSpecId, navigate, setA
     <div className="flex-1 overflow-y-auto bg-agent-bg px-9 py-8 pb-24">
       <div className="mx-auto max-w-[860px]">
         <h1 className="m-0 mb-1.5 text-[22px] font-bold text-agent-ink">开发调度</h1>
-        <div className="mb-7 text-sm text-agent-muted">选择开发策略，系统将自动创建后端开发任务记录</div>
+        <div className="mb-7 text-sm text-agent-muted">选择开发策略，系统将创建开发任务并启动本地真实 Runner 执行</div>
 
         <div className="mb-7 flex items-center justify-between rounded-xl border border-agent-border bg-white px-6 py-5">
           <div>
@@ -125,7 +126,7 @@ export function DispatchPage({ activeRequirementId, activeSpecId, navigate, setA
             返回需求库
           </AppButton>
           <AppButton disabled={starting} loading={starting} type="button" onClick={() => void handleStart()}>
-            {starting ? "创建中..." : "开始并行开发"}
+            {starting ? "启动中..." : "开始真实开发"}
           </AppButton>
         </div>
       </div>

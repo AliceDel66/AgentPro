@@ -72,9 +72,9 @@
 > 这是产品从「演示闭环」走向「真正可用」的关键阶段。
 
 ### 5.1 开发引擎真实执行
-- [ ] 设计 Runner 执行层：将 DevJob 投递到真实的 Codex / Claude Code 工作流（隔离工作区、拉取 AgentSpec、执行、回传事件/产物）。
+- [x] 设计 Runner 执行层：将 DevJob 投递到真实的 Codex / Claude Code 工作流（隔离工作区、拉取 AgentSpec、执行、回传事件/产物）。✅ 已新增 `/dev-jobs/{id}/execute`，后端按 strategy 检测白名单 CLI、生成开发任务包、创建隔离工作区并记录事件/产物；CLI 不可用时返回真实不可用 artifact。
 - [ ] 任务队列与租约：当前已有 `lease_owner/lease_expires_at` 字段，补齐 worker 抢占、超时续租、失败重试与取消。
-- [ ] 产物管理：代码 diff / 测试结果 / 日志的存储与回链（`dev_job_artifacts.uri`）。
+- [x] 产物管理：代码 diff / 测试结果 / 日志的存储与回链（`dev_job_artifacts.uri`）。✅ 已记录 `run-log` 与 `diff-summary` artifacts，包含退出码、stdout/stderr、耗时、diff stat 和本地工作区 URI。
 
 ### 5.2 真实评审
 - [ ] 用真实静态分析、测试通过率、安全扫描结果替换 `review/router.py` 的启发式打分公式。

@@ -355,3 +355,36 @@
 - Commit：
   - 哈希：待提交
   - 信息：接入配置模型驱动的需求对话
+
+### 14. P2 真实 Runner 执行层
+- 状态：已完成
+- 完成功能：
+  - 新增 `/api/v1/dev-jobs/{id}/execute`，用于启动真实 Runner 执行
+  - 新增 Runner executor 服务，按 strategy 执行 `codex`、`claude-code` 或并行策略
+  - 执行前生成 AgentSpec 开发任务包 prompt
+  - 每个引擎在 `.agentpro_runs/{jobId}/{engine}` 下准备隔离工作区
+  - 使用白名单 CLI：Codex 仅调用 `codex exec --file prompt`，Claude Code 仅调用 `claude --file prompt`
+  - CLI 缺失时记录真实 `runner-unavailable` artifact，不再伪造成功状态
+  - CLI 执行后记录 `run-log` artifact，包含退出码、stdout/stderr、耗时和 diff stat
+  - CLI 执行后记录 `diff-summary` artifact，包含代码 diff 与工作区 URI
+  - 前端开发调度页创建 job 后立即触发真实执行接口，再进入监控页
+  - 新增 Runner 工作区忽略规则，避免提交执行产物
+- 相关文件：
+  - .gitignore
+  - backend/app/core/config.py
+  - backend/app/modules/runner/executor.py
+  - backend/app/modules/runner/router.py
+  - backend/tests/test_runner.py
+  - src/services/runnerService.ts
+  - src/pages/workspace/DispatchPage.tsx
+  - docs/AgentPro后续开发计划.md
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_runner.py
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app/modules/runner backend/tests/test_runner.py backend/app/core/config.py
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：落地真实 Runner 执行层

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = "AgentPro <noreply@example.com>"
+    runner_execution_enabled: bool | None = None
+    runner_repo_path: str = ""
+    runner_workspace_root: str = ""
+    runner_command_timeout_seconds: int = 1800
+    runner_max_output_chars: int = 20000
 
     @property
     def cors_origins(self) -> list[str]:
@@ -65,6 +70,13 @@ class Settings(BaseSettings):
         """Whether API docs (/docs, /redoc, /openapi.json) should be served."""
         if self.docs_enabled is not None:
             return self.docs_enabled
+        return self.is_local
+
+    @property
+    def runner_execution_effective(self) -> bool:
+        """Whether the API is allowed to launch local Codex/Claude runner processes."""
+        if self.runner_execution_enabled is not None:
+            return self.runner_execution_enabled
         return self.is_local
 
     @model_validator(mode="after")
