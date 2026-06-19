@@ -135,12 +135,13 @@ if body.status:
 `python-jose` 自 2023 年起有多个 CVE（如 CVE-2024-33663 algorithm confusion 等），且项目维护已停滞。当前虽固定 `algorithms=["HS256"]`、签名/验签对称，暂无直接利用路径，但属于**供应链风险**。建议迁移到 `pyjwt`（活跃维护）或 `authlib`。
 
 #### P1-2 依赖版本完全未锁（仅下限）
-> **状态：后端已锁定（Claude 实施）** — 已执行 `uv lock` 生成并提交 `backend/uv.lock`（解析 67 个包，含全部传递依赖精确版本与哈希），`uv lock --check` 通过；生产可用 `uv sync --frozen`。残余：前端 `package.json` 精确锁定未做（已有 `package-lock.json`，仍为宽松范围），留待前端依赖单独收紧。
+> **状态：已锁定（前后端，Claude 实施）** — 后端执行 `uv lock` 生成并提交 `backend/uv.lock`（解析 67 个包，含全部传递依赖精确版本与哈希），`uv lock --check` 通过，生产可用 `uv sync --frozen`。前端 `package.json` 的 dependencies/devDependencies 已由 `^` 范围收紧为**精确版本**（锁定到当前测试通过的版本，`package-lock.json` 随之更新为精确 spec），`npm install` 报告 up to date、`npm run build` 通过。
 **位置**：`pyproject.toml`、`package.json`
 所有依赖均为 `>=` 下限、无上限、无 lockfile 提交（`backend/` 无 `uv.lock`/`poetry.lock`，根目录虽有 `package-lock.json` 但前端依赖同样宽松）。`fastapi>=0.124`、`cryptography>=49` 等任一大版本升级都可能引入破坏性变更或安全回归。
 **建议**：后端生成并提交 lockfile（`uv lock`），生产用 `--frozen`；前端锁定到精确版本。
 
 #### P1-3 `.env.example` 含生产级 MySQL 连接串模板
+> **状态：已修复（Claude 实施）** — `AGENTPRO_DATABASE_URL` 改为全占位 `mysql+asyncmy://<user>:<password>@<host>:3306/<database>`，并将 `AGENTPRO_SMTP_HOST` 由真实 `smtp.qcloudmail.com` 改为 `smtp.example.com`，不再泄露真实用户名/库名/邮件服务商。
 **位置**：`.env.example`
 ```
 AGENTPRO_DATABASE_URL=mysql+asyncmy://agentpro_user:CHANGE_ME@mysql-host:3306/agentpro

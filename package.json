@@ -12,23 +12,23 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@heroui/react": "^2.8.5",
-    "@tauri-apps/api": "^2.9.0",
-    "framer-motion": "^12.23.26",
-    "lucide-react": "^0.468.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "zustand": "^5.0.14"
+    "@heroui/react": "2.8.10",
+    "@tauri-apps/api": "2.11.0",
+    "framer-motion": "12.40.0",
+    "lucide-react": "0.468.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zustand": "5.0.14"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.9.0",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "@tauri-apps/cli": "2.11.2",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.7.0",
+    "autoprefixer": "10.5.0",
+    "postcss": "8.5.15",
+    "tailwindcss": "3.4.19",
+    "typescript": "5.9.3",
+    "vite": "6.4.3"
   }
 }
