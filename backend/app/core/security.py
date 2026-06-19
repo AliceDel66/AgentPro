@@ -3,9 +3,9 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any
 
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
-from jose import jwt
 
 from app.core.config import get_settings
 

@@ -741,3 +741,28 @@
 - Commit：
   - 哈希：待提交
   - 信息：约束 Runner 事件状态机防止伪造任务流转
+
+### 28. 依赖安全治理：jose→PyJWT 迁移与依赖锁定（ARCHITECTURE_SECURITY_ANALYSIS P1）
+- 状态：已完成（前端依赖精确锁定除外）
+- 完成功能：
+  - P1-1：`python-jose[cryptography]` 迁移为 `pyjwt`；`security.py` 用 `jwt.encode`、`auth/router.py` 用 `jwt.decode` + `jwt.PyJWTError`，仍固定 `algorithms=["HS256"]`
+  - P1-2：执行 `uv lock` 生成并提交 `backend/uv.lock`（67 包精确版本+哈希），`uv lock --check` 通过，生产可用 `uv sync --frozen`
+  - P2-1：移除死依赖 `passlib[bcrypt]`（代码从未 import，实际用 argon2-cffi）
+  - 将测试 JWT 密钥提升至 ≥32 字符，消除 PyJWT InsecureKeyLengthWarning 并与生产强度校验一致
+- 验证：卸载 `python-jose`、`passlib` 后全量 62 passed，确认无残留 import
+- 残余：前端 `package.json` 精确锁定（P1-2 前端部分）、`.env.example` 占位收紧（P1-3）、Runner workspace 根白名单（P1-4）
+- 相关文件：
+  - backend/app/core/security.py
+  - backend/app/modules/auth/router.py
+  - backend/pyproject.toml
+  - backend/uv.lock
+  - backend/tests/conftest.py
+  - docs/ARCHITECTURE_SECURITY_ANALYSIS.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（62 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 uv lock --check
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：迁移 JWT 到 PyJWT 并锁定后端依赖

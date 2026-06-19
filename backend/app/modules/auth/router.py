@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
+import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from jose import JWTError, jwt
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,7 +77,7 @@ async def get_current_user(
     token = authorization.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",

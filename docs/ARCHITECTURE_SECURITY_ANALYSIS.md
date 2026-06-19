@@ -130,10 +130,12 @@ if body.status:
 ### 3.3 🟠 P1 中危问题
 
 #### P1-1 `python-jose` 已知 CVE，建议迁移
+> **状态：已修复（Claude 实施）** — 已将 `python-jose[cryptography]` 迁移为 `pyjwt`（活跃维护）。`security.py` 用 `jwt.encode`、`auth/router.py` 用 `jwt.decode` + `jwt.PyJWTError`，仍固定 `algorithms=["HS256"]`。已从 venv 卸载 `python-jose` 后全量 **62 passed**，确认无残留 import。
 **位置**：`pyproject.toml`、全后端 JWT
 `python-jose` 自 2023 年起有多个 CVE（如 CVE-2024-33663 algorithm confusion 等），且项目维护已停滞。当前虽固定 `algorithms=["HS256"]`、签名/验签对称，暂无直接利用路径，但属于**供应链风险**。建议迁移到 `pyjwt`（活跃维护）或 `authlib`。
 
 #### P1-2 依赖版本完全未锁（仅下限）
+> **状态：后端已锁定（Claude 实施）** — 已执行 `uv lock` 生成并提交 `backend/uv.lock`（解析 67 个包，含全部传递依赖精确版本与哈希），`uv lock --check` 通过；生产可用 `uv sync --frozen`。残余：前端 `package.json` 精确锁定未做（已有 `package-lock.json`，仍为宽松范围），留待前端依赖单独收紧。
 **位置**：`pyproject.toml`、`package.json`
 所有依赖均为 `>=` 下限、无上限、无 lockfile 提交（`backend/` 无 `uv.lock`/`poetry.lock`，根目录虽有 `package-lock.json` 但前端依赖同样宽松）。`fastapi>=0.124`、`cryptography>=49` 等任一大版本升级都可能引入破坏性变更或安全回归。
 **建议**：后端生成并提交 lockfile（`uv lock`），生产用 `--frozen`；前端锁定到精确版本。
@@ -153,7 +155,7 @@ AGENTPRO_DATABASE_URL=mysql+asyncmy://agentpro_user:CHANGE_ME@mysql-host:3306/ag
 
 | # | 问题 | 位置 | 说明 |
 |---|------|------|------|
-| P2-1 | **passlib[bcrypt] 死依赖** | `pyproject.toml:17` | 实际用 `argon2-cffi`（`security.py` 直接用 `PasswordHasher`），`passlib` 从未被 import。删掉以减少攻击面与依赖解析混乱。 |
+| P2-1 | **passlib[bcrypt] 死依赖** ✅已删除 | `pyproject.toml` | 实际用 `argon2-cffi`（`security.py` 直接用 `PasswordHasher`），`passlib` 从未被 import。已从 pyproject 移除并卸载，全量测试通过。 |
 | P2-2 | **限流仅在内存** | `ratelimit.py` | 注释自承认单实例适用。一旦后端水平扩展，登录爆破限流失效。需 Redis 后端共享窗口（`redis` 已在依赖）。 |
 | P2-3 | **SQLite 默认 + 写并发** | `config.py:36` | 默认 `sqlite+aiosqlite`，Runner 异步执行（`BackgroundTasks`）+ SSE 流式 + 多请求并发写，SQLite 写锁易触发 `database is locked`。桌面单用户尚可，需文档明确。 |
 | P2-4 | **Tauri 无 CSP / capability 配置** | `tauri.conf.json`、capabilities 为 `{}` | 未配置 `app.security.csp`，窗口无内容安全策略；capabilities 目录存在但文件为空 `{}`。`execute_agent_runner` 能 spawn 任意已安装 CLI，应在 capability 中显式收敛。 |

@@ -25,7 +25,7 @@ def _hermetic_settings(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
     monkeypatch.setenv("AGENTPRO_SMTP_HOST", "")
     monkeypatch.setenv("AGENTPRO_SMTP_USER", "")
     monkeypatch.setenv("AGENTPRO_SMTP_PASSWORD", "")
-    monkeypatch.setenv("AGENTPRO_JWT_SECRET", "test-secret-not-for-production")
+    monkeypatch.setenv("AGENTPRO_JWT_SECRET", "test-secret-not-for-production-0123456789")
     get_settings.cache_clear()
     # The login throttle is a process-global singleton; clear it so counts don't leak between tests.
     get_login_rate_limiter().clear()
