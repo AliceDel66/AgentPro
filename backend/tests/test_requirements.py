@@ -512,6 +512,11 @@ async def test_requirement_list_includes_latest_workflow_summaries(
     )
     job_id = job_response.json()["data"]["id"]
     await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/lease",
+        headers=headers,
+        json={"runnerId": "desktop-local"},
+    )
+    await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
         json={

@@ -35,6 +35,13 @@ router = APIRouter(prefix="/dev-jobs")
 db_session_dependency = Depends(get_db_session)
 current_user_dependency = Depends(get_current_user)
 TERMINAL_JOB_STATUSES = {"completed", "completed_with_warnings", "failed", "blocked"}
+# Allowed job-status transitions when a client (desktop runner) reports via the events API.
+# A job must pass through `running` before any terminal state, and terminal states are locked,
+# so a user cannot forge completion (e.g. queued -> completed) on their own job.
+JOB_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    "queued": {"running", "blocked", "failed"},
+    "running": {"running", "completed", "completed_with_warnings", "failed", "blocked"},
+}
 DESKTOP_RUNNER_ID_PREFIX = "agentpro-desktop"
 DESKTOP_RUNNER_STALE_TIMEOUT = timedelta(seconds=90)
 
@@ -115,6 +122,22 @@ async def get_owned_job(job_id: str, session: AsyncSession, user: User) -> DevJo
     if not job or job.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dev job not found")
     return job
+
+
+def assert_valid_job_status_transition(current: str, target: str) -> None:
+    """Reject illegal job-status changes coming from the events API.
+
+    Same-status updates are no-ops; otherwise the target must be reachable from the
+    current state. Terminal states have no outgoing transitions, so a finished job
+    cannot be reopened or re-faked.
+    """
+    if target == current:
+        return
+    if target not in JOB_STATUS_TRANSITIONS.get(current, set()):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"非法的任务状态流转：{current} -> {target}",
+        )
 
 
 async def resolve_owned_targets(
@@ -336,6 +359,8 @@ async def append_dev_job_event(
     current_user: User = current_user_dependency,
 ):
     job = await get_owned_job(job_id, session, current_user)
+    if body.status:
+        assert_valid_job_status_transition(job.status, body.status)
     payload = dict(body.payload)
     if body.progress is not None:
         payload["progress"] = body.progress

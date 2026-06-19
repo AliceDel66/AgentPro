@@ -425,3 +425,52 @@ async def test_create_job_requires_a_target(api_client: AsyncClient) -> None:
         json={"strategy": "codex"},
     )
     assert response.status_code == 400
+
+
+async def test_event_rejects_forged_completion(api_client: AsyncClient) -> None:
+    headers = await register_headers(api_client, "forge@example.com")
+    spec_id = await create_owned_spec(api_client, headers)
+    create_response = await api_client.post(
+        "/api/v1/dev-jobs", headers=headers, json={"strategy": "codex", "specId": spec_id}
+    )
+    job_id = create_response.json()["data"]["id"]
+
+    # A queued job cannot jump straight to completed via the events API.
+    forged = await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/events",
+        headers=headers,
+        json={"phase": "fake", "message": "伪造完成", "status": "completed"},
+    )
+    assert forged.status_code == 409
+
+    snapshot = await api_client.get(f"/api/v1/dev-jobs/{job_id}", headers=headers)
+    assert snapshot.json()["data"]["status"] == "queued"
+
+
+async def test_event_locks_terminal_job(api_client: AsyncClient) -> None:
+    headers = await register_headers(api_client, "terminal@example.com")
+    spec_id = await create_owned_spec(api_client, headers)
+    create_response = await api_client.post(
+        "/api/v1/dev-jobs", headers=headers, json={"strategy": "codex", "specId": spec_id}
+    )
+    job_id = create_response.json()["data"]["id"]
+
+    # Lease moves the job into running, then a completion report is legitimate.
+    await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/lease", headers=headers, json={"runnerId": "desktop-local"}
+    )
+    completed = await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/events",
+        headers=headers,
+        json={"phase": "done", "message": "完成", "status": "completed", "progress": 100},
+    )
+    assert completed.status_code == 200
+    assert completed.json()["data"]["status"] == "completed"
+
+    # Once terminal, the job cannot be reopened via the events API.
+    reopen = await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/events",
+        headers=headers,
+        json={"phase": "reopen", "message": "重开", "status": "running"},
+    )
+    assert reopen.status_code == 409

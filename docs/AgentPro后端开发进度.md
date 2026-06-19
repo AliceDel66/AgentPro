@@ -715,3 +715,29 @@
 - Commit：
   - 哈希：本提交
   - 信息：修复评审补全与需求库状态同步
+
+### 27. 约束 Runner 事件状态机（ARCHITECTURE_SECURITY_ANALYSIS P0）
+- 状态：核心已修复（状态机约束）
+- 完成功能：
+  - `DevJobEventCreate.status` 由自由字符串收紧为 `RunnerJobStatus` 枚举（schema 层拒绝未知状态）
+  - `append_dev_job_event` 新增状态机白名单：仅允许 `queued→running/blocked/failed`、`running→completed/completed_with_warnings/failed/blocked`，终态锁定，非法流转返回 409
+  - 阻断「队列态直接伪造为已完成」与「已结束任务被重开/重刷」两类伪造，收紧评审信任链根
+  - 同步修正既有测试为合法 lease→running→completed 流程
+- 残余（需协同桌面 Runner 协议改造并实测，本轮未盲改）：
+  - events 端点 lease 持有者绑定（新增 runnerId 校验）
+  - `completed` 写入要求 exitCode==0 的 run-log 前置
+  - 抽取统一 JobStateMachine 单一事实来源
+- 相关文件：
+  - backend/app/modules/runner/router.py
+  - backend/app/modules/runner/schemas.py
+  - backend/tests/test_runner.py
+  - backend/tests/test_requirements.py
+  - docs/ARCHITECTURE_SECURITY_ANALYSIS.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（62 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run build
+  - 已完成敏感信息扫描，未发现数据库密码、SMTP 密码、API Key、服务器密码或真实用户数据
+- Commit：
+  - 哈希：待提交
+  - 信息：约束 Runner 事件状态机防止伪造任务流转

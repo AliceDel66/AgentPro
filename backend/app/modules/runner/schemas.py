@@ -3,6 +3,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 RunnerStrategy = Literal["codex", "claude-code", "parallel"]
+RunnerJobStatus = Literal[
+    "queued",
+    "running",
+    "completed",
+    "completed_with_warnings",
+    "failed",
+    "blocked",
+]
 
 
 class DevJobCreate(BaseModel):
@@ -49,7 +57,7 @@ class DevJobEventCreate(BaseModel):
     message: str = Field(min_length=1)
     payload: dict[str, Any] = Field(default_factory=dict)
     progress: int | None = Field(default=None, ge=0, le=100)
-    status: str | None = None
+    status: RunnerJobStatus | None = None
 
 
 class DevJobArtifactCreate(BaseModel):
