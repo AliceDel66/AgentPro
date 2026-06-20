@@ -623,3 +623,33 @@ async def test_requirement_list_includes_latest_workflow_summaries(
     assert item["latestJob"]["strategy"] == "codex"
     assert item["latestReview"]["id"] == review["id"]
     assert item["latestReview"]["score"] == review["score"]
+
+
+async def test_spec_captures_delivery_target(api_client: AsyncClient) -> None:
+    headers = await auth_headers(api_client)
+
+    # Mentioning 飞书 → rules detect external delivery mode.
+    external = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={"title": "告警通知 Agent", "initialMessage": "做一个把系统告警推送到飞书群的 agent"},
+    )
+    external_id = external.json()["data"]["id"]
+    external_spec = await api_client.post(
+        f"/api/v1/requirements/{external_id}/spec/generate", headers=headers
+    )
+    external_body = external_spec.json()["data"]["body"]
+    assert external_body["deliveryTarget"]["mode"] == "external"
+
+    # No delivery hint → undecided, and the spec still carries the field.
+    undecided = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={"title": "简历助手", "initialMessage": "帮我整理候选人简历的关键信息"},
+    )
+    undecided_id = undecided.json()["data"]["id"]
+    undecided_spec = await api_client.post(
+        f"/api/v1/requirements/{undecided_id}/spec/generate", headers=headers
+    )
+    undecided_body = undecided_spec.json()["data"]["body"]
+    assert undecided_body["deliveryTarget"]["mode"] == "undecided"

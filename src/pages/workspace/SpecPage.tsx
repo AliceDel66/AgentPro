@@ -74,6 +74,9 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
   const decisions = asList(body.decisions);
   const approvalChecklist = asList(body.approvalChecklist);
   const risks = getRiskList(body);
+  const deliveryTarget = (body.deliveryTarget ?? {}) as Record<string, unknown>;
+  const deliveryMode = String(deliveryTarget.mode ?? "undecided");
+  const deliveryConnectors = asList(deliveryTarget.connectors);
 
   const handleApprove = async () => {
     if (!activeRequirementId || saving) return;
@@ -161,6 +164,15 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
               <BulletList items={risks} empty="暂无高风险提醒。" />
             </SpecSection>
 
+            <SpecSection index="6" title="交付与使用形态">
+              <div className="text-[13px] leading-7 text-agent-secondary">
+                {deliveryModeLabel(deliveryMode)}
+                {deliveryConnectors.length ? (
+                  <span className="text-agent-muted">（{deliveryConnectors.join("、")}）</span>
+                ) : null}
+              </div>
+            </SpecSection>
+
             <div className="bg-[#FFF7ED] px-7 py-[22px]">
               <div className="mb-3 flex items-center gap-2.5 text-[15px] font-semibold text-agent-warning">
                 <AlertTriangle size={20} />
@@ -237,6 +249,19 @@ function BulletList({ items, empty }: { items: string[]; empty: string }) {
       ))}
     </div>
   );
+}
+
+function deliveryModeLabel(mode: string) {
+  switch (mode) {
+    case "in_app":
+      return "软件内使用 · 调度软件内配置的 AI 模型服务";
+    case "external":
+      return "外部集成 · 接入飞书 / 企业微信等外部平台";
+    case "standalone":
+      return "独立后台运行 · 可连接外部消息平台推送";
+    default:
+      return "待确认 · 建议在需求访谈中先确认交付与使用方式";
+  }
 }
 
 function SpecSection({ index, title, children, danger = false }: { index: string; title: string; children: React.ReactNode; danger?: boolean }) {

@@ -14,6 +14,7 @@ class RequirementGraphState(TypedDict, total=False):
     specDraft: dict[str, Any]
     safetyReview: dict[str, Any]
     approvalStatus: str
+    deliveryTarget: dict[str, Any]
 
 
 SCENARIO_KEYWORDS = {
@@ -126,7 +127,33 @@ GENERIC_QUESTION_TEMPLATES = {
     ),
     "fallback": "当 Agent 对「{subject}」不确定、信息不足或判断冲突时，应该如何解释原因并转人工？",
     "data_sources": "支撑「{subject}」判断的业务资料、历史数据、规则文档或实时数据分别在哪里？",
+    "delivery_target": (
+        "做好的「{subject}」Agent 你打算怎么用？"
+        "是在 AgentPro 内直接使用、接入飞书/企业微信等外部平台，还是作为独立后台运行？"
+    ),
 }
+
+# Keywords that hint at the delivery/usage form so the rules path can pre-fill deliveryTarget.
+DELIVERY_KEYWORDS = {
+    "external": [
+        "飞书", "企业微信", "钉钉", "slack", "telegram", "openclaw",
+        "接入", "集成", "机器人", "webhook",
+    ],
+    "standalone": ["后台", "独立运行", "定时", "守护", "常驻", "cron", "服务器跑"],
+    "in_app": ["软件内", "应用内", "在软件里", "app内", "内部使用", "本地使用"],
+}
+
+
+def detect_delivery_mode(text: str) -> str:
+    normalized = text.lower()
+    for mode, keywords in DELIVERY_KEYWORDS.items():
+        if any(keyword.lower() in normalized for keyword in keywords):
+            return mode
+    return "undecided"
+
+
+def build_delivery_target(text: str) -> dict[str, Any]:
+    return {"mode": detect_delivery_mode(text), "connectors": [], "note": ""}
 
 
 def latest_user_text(messages: list[dict[str, str]]) -> str:
@@ -199,6 +226,10 @@ def gap_analysis(state: RequirementGraphState) -> RequirementGraphState:
         "success_metrics": ["指标", "成功", "准确率", "响应", "成本", "满意度", "命中率"],
         "fallback": ["转人工", "降级", "失败", "兜底", "不确定", "复核", "升级"],
         "data_sources": ["知识库", "文档", "数据源", "资料", "订单", "日志", "简历", "jd"],
+        "delivery_target": [
+            "飞书", "企业微信", "钉钉", "slack", "openclaw", "接入", "集成",
+            "后台", "独立", "软件内", "应用内", "机器人", "webhook",
+        ],
     }
     gaps = [
         key for key, keywords in gap_rules.items() if not any(word in corpus for word in keywords)
@@ -250,14 +281,16 @@ def spec_draft(state: RequirementGraphState) -> RequirementGraphState:
     text = conversation_text(state.get("messages", []))
     scenario = detect_scenario(text)
     label = SCENARIO_LABELS.get(scenario, SCENARIO_LABELS["generic"])
+    delivery_target = state.get("deliveryTarget") or build_delivery_target(text)
     draft = {
         "name": f"{label} Agent",
         "objective": state.get("summary", ""),
         "capabilities": ["需求访谈", "主动反问", "AgentSpec 生成", "开发前安全约束整理"],
         "openQuestions": state.get("followupQuestions", []),
         "decisions": state.get("decisions", []),
+        "deliveryTarget": delivery_target,
     }
-    return {**state, "specDraft": draft}
+    return {**state, "specDraft": draft, "deliveryTarget": delivery_target}
 
 
 def safety_review(state: RequirementGraphState) -> RequirementGraphState:

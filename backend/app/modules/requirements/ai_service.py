@@ -34,9 +34,11 @@ SYSTEM_PROMPT = """你是 AgentPro 的需求访谈与 Agent 架构助手。
     "objective": "目标",
     "capabilities": ["能力"],
     "openQuestions": [{"key": "target_users", "question": "问题", "reason": "原因"}],
-    "decisions": [{"key": "scope", "value": "结论", "confirmed": false}]
+    "decisions": [{"key": "scope", "value": "结论", "confirmed": false}],
+    "deliveryTarget": {"mode": "in_app|external|standalone|undecided", "connectors": [], "note": ""}
   },
-  "safetyReview": {"riskLevel": "low|medium|high", "risks": ["风险说明"]}
+  "safetyReview": {"riskLevel": "low|medium|high", "risks": ["风险说明"]},
+  "deliveryTarget": {"mode": "in_app|external|standalone|undecided", "connectors": [], "note": ""}
 }
 
 规则:
@@ -46,6 +48,9 @@ SYSTEM_PROMPT = """你是 AgentPro 的需求访谈与 Agent 架构助手。
 - 不要编造用户没有给出的业务事实；不确定时放入 followupQuestions。
 - confirmedDecisions 中 confirmed=true 的 key 视为用户已经回答；
   禁止再次生成同 key 的 followupQuestions，也不要在 assistantMessage 中重复追问同一问题。
+- 必须确认 Agent 的交付与使用形态 deliveryTarget.mode：在 AgentPro 内直接使用(in_app)、
+  接入飞书/企业微信等外部平台(external)、或独立后台运行(standalone)。未确认时设为 undecided，
+  并在 followupQuestions 中以 key="delivery_target" 主动提出；external 时把目标平台写入 connectors。
 - 当需求足够清晰时，followupQuestions 返回空数组，assistantMessage 提示可以生成 AgentSpec 草案。
 - 高风险动作包括支付、退款、删除、写入生产数据、发送外部消息、审批绕过等。
 - 发现高风险动作时，必须在 safetyReview 中说明。
@@ -276,6 +281,21 @@ def normalize_safety_review(value: Any) -> dict[str, Any]:
     return {"riskLevel": risk_level, "risks": risks}
 
 
+_DELIVERY_MODES = {"in_app", "external", "standalone", "undecided"}
+
+
+def normalize_delivery_target(value: Any) -> dict[str, Any]:
+    data = value if isinstance(value, dict) else {}
+    mode = str(data.get("mode") or "undecided").strip()
+    if mode not in _DELIVERY_MODES:
+        mode = "undecided"
+    return {
+        "mode": mode,
+        "connectors": string_list(data.get("connectors"), limit=8),
+        "note": str(data.get("note") or "").strip(),
+    }
+
+
 def normalize_spec_draft(
     value: Any,
     title: str,
@@ -297,6 +317,7 @@ def normalize_spec_draft(
         "capabilities": capabilities,
         "openQuestions": open_questions,
         "decisions": decisions,
+        "deliveryTarget": normalize_delivery_target(draft.get("deliveryTarget")),
     }
 
 
@@ -364,6 +385,9 @@ def normalize_ai_payload(
         "safetyReview": normalize_safety_review(payload.get("safetyReview")),
         "approvalStatus": "waiting_user_confirmation",
         "model": model,
+        "deliveryTarget": normalize_delivery_target(
+            payload.get("deliveryTarget") or spec_draft.get("deliveryTarget")
+        ),
     }
 
 
