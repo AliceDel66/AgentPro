@@ -53,19 +53,15 @@ const TODO_STATUSES = ["interviewing", "ready_for_spec", "spec_draft"];
 function matchesFilter(status: string, key: FilterKey): boolean {
   switch (key) {
     case "todo":
-      return status !== "trashed" && TODO_STATUSES.includes(status);
+      return TODO_STATUSES.includes(status);
     case "interviewing":
       return status === "interviewing";
     case "draft":
       return status === "ready_for_spec" || status === "spec_draft";
     case "approved":
       return status === "approved";
-    case "archived":
-      return status === "archived";
-    case "trashed":
-      return status === "trashed";
     default:
-      return status !== "trashed";
+      return true;
   }
 }
 
@@ -85,7 +81,17 @@ export function LibraryPage({
   const [actionId, setActionId] = useState<string | null>(null);
 
   const filtered = useMemo(
-    () => requirements.filter((row) => matchesFilter(row.workflowStatus ?? row.status, filter)),
+    () =>
+      requirements.filter((row) => {
+        // Trash/archive are tracked by the raw status; a trashed item keeps a derived
+        // workflowStatus (e.g. "developing"), so trash must never be inferred from it —
+        // otherwise trashed rows leak into "全部" and trashing appears to do nothing.
+        const trashed = row.status === "trashed";
+        if (filter === "trashed") return trashed;
+        if (trashed) return false;
+        if (filter === "archived") return row.status === "archived";
+        return matchesFilter(row.workflowStatus ?? row.status, filter);
+      }),
     [requirements, filter]
   );
   const activeRequirements = useMemo(
@@ -260,9 +266,9 @@ export function LibraryPage({
           <div className="px-6 py-8 text-sm text-agent-muted">该筛选下暂无需求。</div>
         ) : null}
         {filtered.map((row, index) => {
-          const meta = statusMeta(row.workflowStatus ?? row.status);
-          const next = nextActionForRequirement(row);
           const isTrashed = row.status === "trashed";
+          const meta = statusMeta(isTrashed ? "trashed" : row.workflowStatus ?? row.status);
+          const next = nextActionForRequirement(row);
           const busy = actionId === row.id;
           const openRow = () => {
             if (isTrashed) return;
