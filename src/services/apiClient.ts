@@ -42,6 +42,20 @@ function clearStoredTokens(): void {
   globalThis.localStorage?.removeItem(REFRESH_TOKEN_KEY);
 }
 
+const NETWORK_ERROR_MESSAGE = "无法连接后端服务，请确认后端 API 已启动并检查网络后重试。";
+
+// fetch() throws a bare TypeError on network-level failure — "Load failed" in the Tauri/WebKit
+// runtime, "Failed to fetch" in Chromium. Convert it to one clear, actionable message so pages
+// never surface the cryptic raw text.
+async function safeFetch(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${apiBaseUrl}${path}`, init);
+  } catch (error) {
+    console.error("[AgentPro] 请求后端失败", `${apiBaseUrl}${path}`, error);
+    throw new Error(NETWORK_ERROR_MESSAGE);
+  }
+}
+
 let refreshPromise: Promise<boolean> | null = null;
 
 async function refreshAccessToken(): Promise<boolean> {
@@ -83,7 +97,7 @@ function ensureRefreshed(): Promise<boolean> {
 
 async function authedFetch(path: string, init: { method: string; body?: string }): Promise<Response> {
   const send = () =>
-    fetch(`${apiBaseUrl}${path}`, {
+    safeFetch(path, {
       method: init.method,
       headers: buildJsonHeaders(),
       body: init.body
@@ -101,7 +115,7 @@ async function authedFetch(path: string, init: { method: string; body?: string }
 
 async function authedStreamFetch(path: string, body: string): Promise<Response> {
   const send = () =>
-    fetch(`${apiBaseUrl}${path}`, {
+    safeFetch(path, {
       method: "POST",
       headers: buildJsonHeaders(),
       body
