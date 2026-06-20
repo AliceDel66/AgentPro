@@ -204,14 +204,14 @@ fn command_for_engine(engine: &str, program: &str, workdir: &Path) -> Result<Vec
 
 fn trim_output(value: String) -> String {
     const LIMIT: usize = 40_000;
-    if value.len() <= LIMIT {
+    // Count characters, not bytes: slicing by byte index can land mid-UTF-8-char and panic
+    // on multi-byte output (Chinese, emoji, …). Truncating by chars is always boundary-safe.
+    let total = value.chars().count();
+    if total <= LIMIT {
         value
     } else {
-        format!(
-            "{}\n...[truncated {} chars]",
-            &value[..LIMIT],
-            value.len() - LIMIT
-        )
+        let truncated: String = value.chars().take(LIMIT).collect();
+        format!("{truncated}\n...[truncated {} chars]", total - LIMIT)
     }
 }
 
@@ -370,4 +370,26 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentPro");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trim_output;
+
+    #[test]
+    fn trim_output_keeps_short_value() {
+        let input = "短输出 ok".to_string();
+        assert_eq!(trim_output(input.clone()), input);
+    }
+
+    #[test]
+    fn trim_output_truncates_multibyte_without_panic() {
+        // ~45000 Chinese chars (3 bytes each): byte length far exceeds the limit and the
+        // 40_000th byte never lands on a char boundary — the old byte slice would panic here.
+        let input = "中".repeat(45_000);
+        let trimmed = trim_output(input);
+        assert!(trimmed.contains("[truncated 5000 chars]"));
+        // Result is still valid UTF-8 and retains the truncated prefix.
+        assert!(trimmed.starts_with('中'));
+    }
 }
