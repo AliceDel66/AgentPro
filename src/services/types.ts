@@ -141,6 +141,27 @@ export interface RunnerEvent {
   createdAt: string;
 }
 
+export interface RunnerDeliveryEntrypoint {
+  label: string;
+  kind: "workspace" | "build" | "readme" | string;
+  path: string;
+}
+
+export interface RunnerDeliveryManifest {
+  version: number;
+  jobId: string;
+  engine: "codex" | "claude-code" | string;
+  workspacePath: string;
+  deliverableType: "agentpro_patch" | "in_app_agent" | "external_connector" | "standalone_service" | string;
+  summary: string;
+  entrypoints: RunnerDeliveryEntrypoint[];
+  changedFiles: string[];
+  untrackedFiles: string[];
+  previewCommand: string;
+  buildArtifactMissing: boolean;
+  createdAt: string;
+}
+
 export interface ReviewReport {
   id: string;
   jobId?: string | null;

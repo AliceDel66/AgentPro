@@ -926,3 +926,31 @@
 - Commit：
   - 哈希：本提交
   - 信息：完成 Runner 保存目录配置
+
+### 37. Runner 交付清单生成与上报
+- 状态：已完成
+- 完成功能：
+  - 桌面端 Runner 执行完成后在工作区生成 `agentpro-delivery.json`
+  - 交付清单记录 Job、引擎、工作区、交付类型、入口文件、修改文件、未跟踪文件、预览命令和构建产物状态
+  - 本机 Runner 除 `run-log`、`diff-summary` 外，新增回传 `delivery-manifest` artifact
+  - 后端 artifact 白名单新增 `delivery-manifest`，评审证据链和交付建议可识别交付清单
+  - 后端 Runner 执行路径同步生成并写入交付清单，保持桌面端和服务端行为一致
+- 相关文件：
+  - src-tauri/Cargo.toml
+  - src-tauri/Cargo.lock
+  - src-tauri/src/lib.rs
+  - src/services/localRunnerService.ts
+  - src/services/types.ts
+  - backend/app/modules/runner/executor.py
+  - backend/app/modules/runner/schemas.py
+  - backend/app/modules/review/analyzer.py
+  - backend/tests/test_review.py
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 cargo check --manifest-path src-tauri/Cargo.toml
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_review.py（8 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+- Commit：
+  - 哈希：本提交
+  - 信息：完成 Runner 交付清单生成与上报

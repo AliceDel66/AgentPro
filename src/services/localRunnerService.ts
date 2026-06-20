@@ -7,7 +7,7 @@ import {
   getRunnerPackage,
   leaseRunnerJob
 } from "./runnerService";
-import type { RunnerJob, RunnerPackage } from "./types";
+import type { RunnerDeliveryManifest, RunnerJob, RunnerPackage } from "./types";
 import { getStoredRunnerWorkspaceRoot } from "../stores/runnerSettingsStore";
 
 interface CliDetection {
@@ -27,6 +27,8 @@ interface LocalRunnerResult {
   command: string[];
   diffStat: string;
   diff: string;
+  deliveryManifestPath: string;
+  deliveryManifest: RunnerDeliveryManifest;
 }
 
 interface ExecuteLocalRunnerOptions {
@@ -155,6 +157,13 @@ async function executeEngine(
       summary: result.diffStat || "未产生代码 diff",
       uri: result.workdir,
       payload: { stat: result.diffStat, diff: result.diff }
+    });
+    await appendRunnerArtifact(jobId, {
+      engine,
+      kind: "delivery-manifest",
+      summary: result.deliveryManifest.summary,
+      uri: result.deliveryManifestPath,
+      payload: result.deliveryManifest as unknown as Record<string, unknown>
     });
     await appendRunnerEvent(jobId, {
       phase: "desktop.runner.finish",

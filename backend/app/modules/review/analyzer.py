@@ -150,6 +150,33 @@ def has_test_evidence(
     )
 
 
+def delivery_manifest_payload(artifacts: list[DevJobArtifact]) -> dict[str, Any] | None:
+    for artifact in artifacts:
+        if artifact.kind == "delivery-manifest" and isinstance(artifact.payload, dict):
+            return artifact.payload
+    return None
+
+
+def delivery_manifest_advice(manifest: dict[str, Any]) -> str:
+    deliverable_type = str(manifest.get("deliverableType") or "unknown")
+    type_label = {
+        "agentpro_patch": "AgentPro 源码补丁",
+        "in_app_agent": "AgentPro 内置 Agent",
+        "external_connector": "外部平台连接器",
+        "standalone_service": "独立服务",
+    }.get(deliverable_type, deliverable_type)
+    entrypoints = manifest.get("entrypoints")
+    entry_count = len(entrypoints) if isinstance(entrypoints, list) else 0
+    preview_command = str(manifest.get("previewCommand") or "").strip()
+    build_missing = bool(manifest.get("buildArtifactMissing"))
+    advice = f"当前产物已生成交付清单，类型为{type_label}，包含 {entry_count} 个可打开入口。"
+    if preview_command:
+        advice += f" 可使用 `{preview_command}` 进行本地预览。"
+    if build_missing:
+        advice += " 交付清单未发现构建产物，正式交付前需要补充构建或说明运行方式。"
+    return advice
+
+
 def security_hit_count(by_engine: dict[str, EngineEvidence]) -> int:
     return sum(len(evidence.security_hits) for evidence in by_engine.values())
 
@@ -497,7 +524,15 @@ def build_delivery_advice(
     artifacts: list[DevJobArtifact],
     action_plan: list[dict[str, Any]],
 ) -> str:
+    manifest = delivery_manifest_payload(artifacts)
     high_priority = any(item["priority"] == "high" for item in action_plan)
+    if manifest:
+        advice = delivery_manifest_advice(manifest)
+        if high_priority or hallucination_risk >= 45:
+            return f"{advice} 但评审仍存在高优先级风险，建议先按优化方案返工后再交付。"
+        if score >= 85:
+            return f"{advice} 当前评分达到内部试用门槛，可进入交付验收。"
+        return f"{advice} 当前建议作为候选版本保留，完成优化后再交付。"
     if not artifacts:
         return "当前缺少可审查产物，建议先完成真实 Runner 执行并重新生成评审报告。"
     if high_priority or hallucination_risk >= 45:

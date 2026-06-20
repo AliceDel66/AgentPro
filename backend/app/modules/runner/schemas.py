@@ -67,6 +67,7 @@ RunnerArtifactKind = Literal[
     "security-scan",
     "secret-scan",
     "runner-unavailable",
+    "delivery-manifest",
 ]
 
 

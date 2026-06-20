@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -317,6 +318,62 @@ async def collect_git_diff(workdir: Path) -> dict[str, str]:
     }
 
 
+async def collect_git_status_files(workdir: Path) -> dict[str, list[str]]:
+    process = await asyncio.create_subprocess_exec(
+        "git",
+        "status",
+        "--porcelain",
+        cwd=workdir,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate()
+    status = (
+        stdout.decode(errors="replace")
+        if process.returncode == 0
+        else stderr.decode(errors="replace")
+    )
+    changed_files: list[str] = []
+    untracked_files: list[str] = []
+    for line in status.splitlines():
+        code = line[:2].strip()
+        path = line[3:].strip() if len(line) > 3 else ""
+        if not path:
+            continue
+        if code == "??":
+            untracked_files.append(path)
+        else:
+            changed_files.append(path)
+    return {"changedFiles": changed_files, "untrackedFiles": untracked_files}
+
+
+async def build_delivery_manifest(job: DevJob, engine: str, workdir: Path) -> dict[str, Any]:
+    status_files = await collect_git_status_files(workdir)
+    dist_index = workdir / "dist" / "index.html"
+    readme = workdir / "README.md"
+    entrypoints: list[dict[str, str]] = [
+        {"label": "Runner 工作区", "kind": "workspace", "path": str(workdir)}
+    ]
+    if dist_index.exists():
+        entrypoints.append({"label": "构建产物", "kind": "build", "path": str(dist_index)})
+    if readme.exists():
+        entrypoints.append({"label": "运行说明", "kind": "readme", "path": str(readme)})
+    return {
+        "version": 1,
+        "jobId": job.id,
+        "engine": engine,
+        "workspacePath": str(workdir),
+        "deliverableType": "agentpro_patch",
+        "summary": "本次产物是 AgentPro 源码补丁，而不是独立安装包。",
+        "entrypoints": entrypoints,
+        "changedFiles": status_files["changedFiles"],
+        "untrackedFiles": status_files["untrackedFiles"],
+        "previewCommand": "npm run preview -- --host 127.0.0.1",
+        "buildArtifactMissing": not dist_index.exists(),
+        "createdAt": datetime.now(UTC).isoformat(),
+    }
+
+
 async def run_process(command: list[str], workdir: Path) -> tuple[int, str, str, float]:
     started = time.perf_counter()
     process = await asyncio.create_subprocess_exec(
@@ -435,6 +492,21 @@ async def execute_engine(
         summary=diff["stat"] or "未产生代码 diff",
         uri=str(workdir),
         payload=diff,
+    )
+    delivery_manifest = await build_delivery_manifest(job, engine, workdir)
+    delivery_manifest_path = workdir / "agentpro-delivery.json"
+    delivery_manifest_path.write_text(
+        json.dumps(delivery_manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    await add_artifact(
+        session,
+        job,
+        engine=engine,
+        kind="delivery-manifest",
+        summary=delivery_manifest["summary"],
+        uri=str(delivery_manifest_path),
+        payload=delivery_manifest,
     )
     await add_event(
         session,

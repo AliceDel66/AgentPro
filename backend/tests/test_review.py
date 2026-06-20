@@ -99,6 +99,36 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
             "payload": {"tests": "passed"},
         },
     )
+    await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/artifacts",
+        headers=headers,
+        json={
+            "engine": "codex",
+            "kind": "delivery-manifest",
+            "summary": "本次产物是 AgentPro 源码补丁，而不是独立安装包。",
+            "uri": "/tmp/agentpro-runs/job/codex/agentpro-delivery.json",
+            "payload": {
+                "version": 1,
+                "jobId": job_id,
+                "engine": "codex",
+                "workspacePath": "/tmp/agentpro-runs/job/codex",
+                "deliverableType": "agentpro_patch",
+                "summary": "本次产物是 AgentPro 源码补丁，而不是独立安装包。",
+                "entrypoints": [
+                    {
+                        "label": "Runner 工作区",
+                        "kind": "workspace",
+                        "path": "/tmp/agentpro-runs/job/codex",
+                    }
+                ],
+                "changedFiles": ["src/app.py"],
+                "untrackedFiles": ["src/new_agent.py"],
+                "previewCommand": "npm run preview -- --host 127.0.0.1",
+                "buildArtifactMissing": True,
+                "createdAt": "2026-06-20T00:00:00Z",
+            },
+        },
+    )
     await drive_job_terminal(api_client, headers, job_id)
 
     review_response = await api_client.post(
@@ -115,8 +145,9 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
     assert len(review["scoreBreakdown"]) == 7
     assert any(item["key"] == "test_coverage" for item in review["scoreBreakdown"])
     assert any(item["type"] == "run-log" for item in review["evidenceSources"])
+    assert any(item["type"] == "delivery-manifest" for item in review["evidenceSources"])
     assert review["actionPlan"]
-    assert review["deliveryAdvice"]
+    assert "交付清单" in review["deliveryAdvice"]
 
     get_response = await api_client.get(f"/api/v1/reviews/{review['id']}", headers=headers)
     assert get_response.status_code == 200

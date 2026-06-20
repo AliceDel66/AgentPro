@@ -31,6 +31,31 @@ struct RunnerProcess {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct DeliveryEntrypoint {
+    label: String,
+    kind: String,
+    path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeliveryManifest {
+    version: u8,
+    job_id: String,
+    engine: String,
+    workspace_path: String,
+    deliverable_type: String,
+    summary: String,
+    entrypoints: Vec<DeliveryEntrypoint>,
+    changed_files: Vec<String>,
+    untracked_files: Vec<String>,
+    preview_command: String,
+    build_artifact_missing: bool,
+    created_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct LocalRunnerResult {
     engine: String,
     exit_code: i32,
@@ -42,6 +67,8 @@ struct LocalRunnerResult {
     command: Vec<String>,
     diff_stat: String,
     diff: String,
+    delivery_manifest_path: String,
+    delivery_manifest: DeliveryManifest,
 }
 
 fn program_for_engine(engine: &str) -> Result<&'static str, String> {
@@ -241,6 +268,79 @@ fn run_git_capture(workdir: &Path, args: &[&str]) -> String {
     }
 }
 
+fn git_status_files(workdir: &Path) -> (Vec<String>, Vec<String>) {
+    let status = run_git_capture(workdir, &["status", "--porcelain"]);
+    let mut changed_files = Vec::new();
+    let mut untracked_files = Vec::new();
+
+    for line in status.lines() {
+        let code = line.get(0..2).unwrap_or("").trim();
+        let path = line.get(3..).unwrap_or("").trim();
+        if path.is_empty() {
+            continue;
+        }
+        if code == "??" {
+            untracked_files.push(path.to_string());
+        } else {
+            changed_files.push(path.to_string());
+        }
+    }
+
+    (changed_files, untracked_files)
+}
+
+fn iso_timestamp_utc() -> String {
+    let output = Command::new("date").arg("-u").arg("+%Y-%m-%dT%H:%M:%SZ").output();
+    match output {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => "1970-01-01T00:00:00Z".to_string(),
+    }
+}
+
+fn build_delivery_manifest(job_id: &str, engine: &str, workdir: &Path) -> DeliveryManifest {
+    let (changed_files, untracked_files) = git_status_files(workdir);
+    let dist_index = workdir.join("dist").join("index.html");
+    let readme = workdir.join("README.md");
+    let build_artifact_missing = !dist_index.exists();
+    let mut entrypoints = vec![DeliveryEntrypoint {
+        label: "Runner 工作区".to_string(),
+        kind: "workspace".to_string(),
+        path: workdir.to_string_lossy().to_string(),
+    }];
+
+    if dist_index.exists() {
+        entrypoints.push(DeliveryEntrypoint {
+            label: "构建产物".to_string(),
+            kind: "build".to_string(),
+            path: dist_index.to_string_lossy().to_string(),
+        });
+    }
+    if readme.exists() {
+        entrypoints.push(DeliveryEntrypoint {
+            label: "运行说明".to_string(),
+            kind: "readme".to_string(),
+            path: readme.to_string_lossy().to_string(),
+        });
+    }
+
+    DeliveryManifest {
+        version: 1,
+        job_id: job_id.to_string(),
+        engine: engine.to_string(),
+        workspace_path: workdir.to_string_lossy().to_string(),
+        deliverable_type: "agentpro_patch".to_string(),
+        summary: "本次产物是 AgentPro 源码补丁，而不是独立安装包。".to_string(),
+        entrypoints,
+        changed_files,
+        untracked_files,
+        preview_command: "npm run preview -- --host 127.0.0.1".to_string(),
+        build_artifact_missing,
+        created_at: iso_timestamp_utc(),
+    }
+}
+
 #[tauri::command]
 fn detect_agent_cli(engine: String) -> Result<CliDetection, String> {
     let path = resolve_program(&engine).ok();
@@ -381,6 +481,11 @@ fn execute_agent_runner_blocking(
     let duration = started.elapsed().as_secs_f64();
     let diff_stat = run_git_capture(&workdir, &["diff", "--stat"]);
     let diff = run_git_capture(&workdir, &["diff"]);
+    let delivery_manifest = build_delivery_manifest(&job_id, &engine, &workdir);
+    let delivery_manifest_path = workdir.join("agentpro-delivery.json");
+    let delivery_manifest_json = serde_json::to_string_pretty(&delivery_manifest)
+        .map_err(|error| error.to_string())?;
+    fs::write(&delivery_manifest_path, delivery_manifest_json).map_err(|error| error.to_string())?;
 
     Ok(LocalRunnerResult {
         engine,
@@ -393,6 +498,8 @@ fn execute_agent_runner_blocking(
         command,
         diff_stat,
         diff,
+        delivery_manifest_path: delivery_manifest_path.to_string_lossy().to_string(),
+        delivery_manifest,
     })
 }
 

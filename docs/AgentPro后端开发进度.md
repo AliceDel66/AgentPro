@@ -766,3 +766,24 @@
 - Commit：
   - 哈希：待提交
   - 信息：迁移 JWT 到 PyJWT 并锁定后端依赖
+
+### 29. Runner 交付清单与评审证据扩展
+- 状态：已完成
+- 完成功能：
+  - 后端 Runner 在执行完成后生成 `agentpro-delivery.json`
+  - `DevJobArtifactCreate.kind` 新增 `delivery-manifest`
+  - Review analyzer 将 `delivery-manifest` 纳入证据链，并优先根据交付清单生成交付建议
+  - 交付清单包含工作区、构建产物、README、修改文件、未跟踪文件、预览命令和构建产物缺失状态
+  - 新增回归测试覆盖 `delivery-manifest` artifact 写入、证据链展示和交付建议生成
+- 相关文件：
+  - backend/app/modules/runner/executor.py
+  - backend/app/modules/runner/schemas.py
+  - backend/app/modules/review/analyzer.py
+  - backend/tests/test_review.py
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_review.py（8 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+- Commit：
+  - 哈希：本提交
+  - 信息：完成 Runner 交付清单生成与上报
