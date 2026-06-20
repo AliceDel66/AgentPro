@@ -6,6 +6,13 @@
 - MySQL：使用外部云数据库，通过服务器 `.env` 注入连接串
 - 部署目录：`/opt/agentpro`
 
+## 当前测试部署
+- 服务器：`82.158.226.253`
+- 后端目录：`/opt/agentpro/backend`
+- 容器：`api`、`redis`
+- 健康检查：`http://82.158.226.253:8000/api/v1/health`
+- 注意：服务器本机访问公网 IP 与 `127.0.0.1` 均已验证返回 `ok: true`；如本地电脑直连出现 `Empty reply from server`，优先检查云厂商安全组、防火墙、运营商入站策略或端口开放规则。
+
 ## 服务器目录
 ```bash
 mkdir -p /opt/agentpro
@@ -68,6 +75,22 @@ docker compose up -d --build
 docker compose exec api alembic -c alembic.ini upgrade head
 ```
 
+从 macOS 打包上传后端时必须排除 AppleDouble 和本地缓存文件，避免 Alembic 误加载 `._*.py`：
+
+```bash
+COPYFILE_DISABLE=1 tar --no-xattrs \
+  --exclude '.env' \
+  --exclude '.venv' \
+  --exclude '__pycache__' \
+  --exclude '.pytest_cache' \
+  --exclude '.ruff_cache' \
+  --exclude '*.egg-info' \
+  --exclude 'agentpro_local.db' \
+  --exclude '.DS_Store' \
+  --exclude '._*' \
+  -czf /tmp/agentpro-backend.tar.gz backend
+```
+
 ## 验收
 ```bash
 curl http://<SERVER_IP>:8000/api/v1/health
@@ -76,7 +99,23 @@ curl http://<SERVER_IP>:8000/api/v1/health
 期望返回：
 
 ```json
-{"ok":true,"data":{"status":"ok","service":"agentpro-api","version":"0.1.0"},"message":null}
+{
+  "ok": true,
+  "data": {
+    "status": "ok",
+    "service": "agentpro-api",
+    "version": "0.1.0",
+    "contractVersion": 2,
+    "minDesktopContractVersion": 2,
+    "capabilities": [
+      "runner.desktop-local.v1",
+      "runner.artifact.delivery-manifest.v1",
+      "review.delivery-manifest-payload.v1",
+      "review.action-plan.v1"
+    ]
+  },
+  "message": null
+}
 ```
 
 ## 常用运维命令

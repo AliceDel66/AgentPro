@@ -827,3 +827,27 @@
 - Commit：
   - 哈希：本提交
   - 信息：完成后端桌面版本一致性自检
+
+### 32. 服务器 Docker 部署验收
+- 状态：已完成
+- 完成功能：
+  - 已将当前后端部署到服务器 `/opt/agentpro/backend`
+  - 使用 Docker Compose 启动 `api` 与 `redis`
+  - 已在服务器 `.env` 注入数据库、JWT、加密密钥和运行时配置，敏感信息未写入 Git
+  - 已执行 Alembic 迁移到 `20260618_0002 (head)`
+  - 新增 `backend/.dockerignore`，避免 macOS AppleDouble `._*` 文件进入 Docker 上下文或远端部署包导致 Alembic 误加载
+- 相关文件：
+  - backend/.dockerignore
+  - backend/docker-compose.yml
+  - backend/Dockerfile
+  - docs/AgentPro后端部署.md
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 服务器 `docker compose ps` 显示 `backend-api-1` 为 healthy，`backend-redis-1` 为 Up
+  - 服务器本机 `curl http://127.0.0.1:8000/api/v1/health` 返回 `ok: true`
+  - 服务器自访问 `curl http://82.158.226.253:8000/api/v1/health` 返回 `ok: true`
+  - 当前本机直连公网 `http://82.158.226.253:8000/api/v1/health` 出现 `Empty reply from server`，容器日志未收到该请求，判断为外部网络或云安全策略可达性问题，需在云控制台继续核对入站策略
+  - SMTP 未配置真实腾讯云凭据，邮箱验证码发送能力上线前仍需补齐服务器 `.env`
+- Commit：
+  - 哈希：本提交
+  - 信息：修复后端 Docker 打包忽略规则并记录部署验收
