@@ -416,7 +416,26 @@ async def stream_requirement_answer(
 
     assistant_text = "".join(assistant_parts).strip()
     if assistant_text:
-        graph_state = run_requirement_graph(messages, confirmed_decisions=decisions)
+        # Derive the structured state (followups / specDraft / safety) from real AI too —
+        # not the rules template — so the questions reflect the user's actual scenario and
+        # AgentSpec is AI-authored. Fall back to rules only when the AI call is unavailable.
+        graph_state = None
+        if not stream_error:
+            try:
+                graph_state = await run_ai_requirement_graph(
+                    session,
+                    current_user.id,
+                    requirement.title,
+                    messages,
+                    confirmed_decisions=decisions,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Requirement AI structured graph failed after stream: %s",
+                    exc.__class__.__name__,
+                )
+        if graph_state is None:
+            graph_state = run_requirement_graph(messages, confirmed_decisions=decisions)
         graph_state["assistantMessage"] = assistant_text
         graph_state["model"] = "stream"
         graph_state["aiResponseFormat"] = "stream_text"

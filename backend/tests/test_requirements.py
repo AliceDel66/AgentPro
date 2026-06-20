@@ -299,6 +299,76 @@ async def test_requirement_chat_streams_tokens_and_detail(api_client: AsyncClien
     assert len(message_details[-1]["messages"]) >= 4
 
 
+async def test_requirement_stream_uses_ai_structured_followups(
+    api_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = await auth_headers(api_client)
+    await api_client.put(
+        "/api/v1/model/config",
+        headers=headers,
+        json={
+            "provider": "sub2api",
+            "baseUrl": "https://ai.example.com/v1",
+            "model": "gpt-stream-structured",
+            "apiKey": "stream-secret",
+        },
+    )
+
+    async def fake_stream(*args, **kwargs):
+        for token in ["我", "来", "确认", "几个", "关键点"]:
+            yield token
+
+    async def fake_chat_completion(base_url, api_key, model, messages):
+        # Distinctive AI followup key the rules template never produces.
+        return json.dumps(
+            {
+                "assistantMessage": "结构化分析",
+                "summary": "用户想做直播运营 Agent。",
+                "gaps": ["live_catalog"],
+                "followupQuestions": [
+                    {
+                        "key": "live_catalog",
+                        "question": "主播带货时只覆盖美妆类目还是全品类？",
+                        "reason": "界定脚本范围",
+                    }
+                ],
+                "decisions": [],
+                "specDraft": {
+                    "name": "直播运营 Agent",
+                    "objective": "整理脚本与观众问题",
+                    "capabilities": ["脚本整理"],
+                    "openQuestions": [],
+                    "decisions": [],
+                },
+                "safetyReview": {"riskLevel": "low", "risks": []},
+            },
+            ensure_ascii=False,
+        )
+
+    router_module = import_module("app.modules.requirements.router")
+    ai_module = import_module("app.modules.requirements.ai_service")
+    monkeypatch.setattr(router_module, "stream_ai_requirement_message", fake_stream)
+    monkeypatch.setattr(ai_module, "call_openai_chat_completion", fake_chat_completion)
+
+    async with api_client.stream(
+        "POST",
+        "/api/v1/requirements/stream",
+        headers=headers,
+        json={"title": "直播运营 Agent", "initialMessage": "我想做一个直播运营 Agent。"},
+    ) as response:
+        assert response.status_code == 200
+        body = await response.aread()
+
+    events = parse_sse_events(body.decode())
+    detail = [payload for event, payload in events if event == "detail"][-1]
+    followup_keys = [item["key"] for item in detail["followupQuestions"]]
+    assert "live_catalog" in followup_keys  # AI structure, not the rules template keys
+    assert all(
+        key not in followup_keys for key in ("target_users", "tools", "permissions")
+    )
+
+
 async def test_requirement_chat_uses_saved_ai_model_config(
     api_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
