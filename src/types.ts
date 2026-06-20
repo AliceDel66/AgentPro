@@ -11,6 +11,8 @@ export type AppRoute =
   | "monitor"
   | "review"
   | "reports"
+  | "agents"
+  | "agentRun"
   | "settings";
 
 export type Navigate = (route: AppRoute) => void;

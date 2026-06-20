@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.modules.agents.router import router as agents_router
 from app.modules.auth.router import router as auth_router
 from app.modules.health.router import router as health_router
 from app.modules.models.router import router as models_router
@@ -14,3 +15,4 @@ api_router.include_router(models_router, tags=["models"])
 api_router.include_router(requirements_router, tags=["requirements"])
 api_router.include_router(review_router, tags=["reviews"])
 api_router.include_router(runner_router, tags=["runner"])
+api_router.include_router(agents_router, tags=["agents"])

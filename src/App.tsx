@@ -7,6 +7,8 @@ import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { SetupPage } from "./pages/setup/SetupPage";
+import { AgentsPage } from "./pages/workspace/AgentsPage";
+import { AgentRunPage } from "./pages/workspace/AgentRunPage";
 import { ChatPage } from "./pages/workspace/ChatPage";
 import { DispatchPage } from "./pages/workspace/DispatchPage";
 import { FollowupPage } from "./pages/workspace/FollowupPage";
@@ -21,6 +23,7 @@ import { canEnterWorkflowRoute, fallbackRouteForLockedWorkflow } from "./lib/wor
 import { evaluateBackendContract, getBackendHealth, type BackendContractCheck } from "./services/healthService";
 import { useAuthStore } from "./stores/authStore";
 import { useWorkflowStore } from "./stores/workflowStore";
+import type { DeliveredAgent } from "./services/types";
 import type { AppRoute } from "./types";
 
 const AUTH_ROUTES: AppRoute[] = ["login", "register", "forgot"];
@@ -34,6 +37,7 @@ export default function App() {
   const [route, setRoute] = useState<AppRoute>("login");
   const [booted, setBooted] = useState(false);
   const [contractState, setContractState] = useState<ContractState>({ status: "checking" });
+  const [activeAgent, setActiveAgent] = useState<DeliveredAgent | null>(null);
   // Workflow context is persisted in the store so a refresh keeps the active project.
   const activeRequirementId = useWorkflowStore((state) => state.activeRequirementId);
   const activeSpecId = useWorkflowStore((state) => state.activeSpecId);
@@ -193,6 +197,10 @@ export default function App() {
             setActiveReviewId={setActiveReviewId}
             setActiveReviewTab={setActiveReviewTab}
           />
+        ) : route === "agents" ? (
+          <AgentsPage navigate={guardedNavigate} setActiveAgent={setActiveAgent} />
+        ) : route === "agentRun" ? (
+          <AgentRunPage agent={activeAgent} navigate={guardedNavigate} />
         ) : route === "settings" ? (
           <SettingsPage navigate={guardedNavigate} />
         ) : (

@@ -214,3 +214,12 @@ export interface ReviewActionPlanItem {
   sourceFindingIds: string[];
   reworkRecommended: boolean;
 }
+
+export interface DeliveredAgent {
+  requirementId: string;
+  title: string;
+  specId: string;
+  reviewId: string;
+  deliveryMode: string;
+  objective: string;
+}
