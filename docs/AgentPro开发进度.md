@@ -879,3 +879,28 @@
 - Commit：
   - 哈希：本提交
   - 信息：完善 README 项目说明
+
+### 35. 登录白屏与桌面启动稳定性修复
+- 状态：已完成
+- 完成功能：
+  - 修复登录后 auth 状态与路由跳转竞争，模型配置检查完成后再进入已登录工作区
+  - 已保存模型配置的用户登录后进入需求库，避免直接撞到旧 workflow 上下文导致异常
+  - 新增 workspace ErrorBoundary，页面渲染异常时显示可恢复错误页，不再整窗白屏
+  - Chat 页兼容旧需求数据中缺失 `safetyReview.risks` 或 `decisions` 的情况
+  - 重新打包桌面端，并改用稳定后台进程启动本地 FastAPI 服务
+- 相关文件：
+  - src/App.tsx
+  - src/components/common/ErrorBoundary.tsx
+  - src/pages/auth/LoginPage.tsx
+  - src/pages/workspace/ChatPage.tsx
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 VITE_AGENTPRO_SERVER_URL=http://127.0.0.1:8000 npm run build
+  - 已通过 VITE_AGENTPRO_SERVER_URL=http://127.0.0.1:8000 npm run tauri build
+  - 已通过本地后端 `/api/v1/health` 健康检查
+  - 已通过 smoke 账号 API 登录与模型配置读取
+  - 桌面端已重新启动到新版登录页
+- Commit：
+  - 哈希：本提交
+  - 信息：修复登录白屏与桌面启动稳定性

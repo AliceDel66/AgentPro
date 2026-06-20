@@ -28,11 +28,12 @@ export function LoginPage({ navigate }: LoginPageProps) {
     setSubmitting(true);
     try {
       const result = await loginWithPassword(identifier.trim(), password);
-      persistAuthSession(result.data);
-      setAuthSession(result.data);
+      const session = result.data;
+      persistAuthSession(session);
       const configResult = await getModelConfig();
       const hasSavedModelConfig = Boolean(configResult.data.secretSaved && configResult.data.model);
-      navigate(hasSavedModelConfig ? "chat" : "setup");
+      setAuthSession(session);
+      navigate(hasSavedModelConfig ? "library" : "setup");
     } catch (error) {
       const message = error instanceof Error ? error.message : "登录失败，请稍后重试";
       setErrorMessage(message === "Invalid credentials" ? "邮箱或密码不正确" : message);

@@ -29,6 +29,13 @@ function questionKey(question: Record<string, unknown>, index: number) {
   return String(question.key ?? `question_${index + 1}`);
 }
 
+function safetyRiskText(safetyReview: Record<string, unknown> | undefined) {
+  const risks = safetyReview?.risks;
+  if (Array.isArray(risks)) return risks.length ? risks.map(String).join("；") : "暂无明显高风险。";
+  if (typeof risks === "string" && risks.trim()) return risks;
+  return "高风险操作需要评估权限边界和人工审批。";
+}
+
 export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId }: ChatPageProps) {
   const [draft, setDraft] = useState("");
   const [detail, setDetail] = useState<RequirementDetail | null>(null);
@@ -85,7 +92,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
 
   const pendingQuestions = detail?.followupQuestions ?? [];
   const maturity = detail?.maturity ?? 0;
-  const confirmedCount = useMemo(() => detail?.decisions.filter((item) => item.confirmed).length ?? 0, [detail]);
+  const confirmedCount = useMemo(() => (detail?.decisions ?? []).filter((item) => item.confirmed).length, [detail]);
 
   // Keep the conversation pinned to the latest message while loading / thinking.
   useEffect(() => {
@@ -298,7 +305,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
               {pendingQuestions.length ? "建议先回答反问，再生成 AgentSpec 草案。" : "需求信息已较完整，可以生成需求草案。"}
             </InfoBox>
             <InfoBox tone="red" title="风险提醒">
-              {String(detail?.safetyReview.risks ?? "高风险操作需要评估权限边界和人工审批。")}
+              {safetyRiskText(detail?.safetyReview)}
             </InfoBox>
             <button
               className="mt-1 inline-flex items-center justify-center gap-2 rounded-[10px] bg-agent-primary px-4 py-3 text-[13px] font-semibold text-white hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:opacity-60"

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "./components/layout/AppShell";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { Spinner } from "./components/common/Spinner";
 import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
 import { LoginPage } from "./pages/auth/LoginPage";
@@ -94,57 +95,59 @@ export default function App() {
 
   return (
     <AppShell navigate={guardedNavigate} route={route}>
-      {route === "chat" ? (
-        <ChatPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} setActiveRequirementId={setActiveRequirementId} />
-      ) : route === "followup" ? (
-        <FollowupPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} />
-      ) : route === "spec" ? (
-        <SpecPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} setActiveSpecId={setActiveSpecId} />
-      ) : route === "library" ? (
-        <LibraryPage
-          navigate={guardedNavigate}
-          setActiveJobId={setActiveJobId}
-          setActiveJobStatus={setActiveJobStatus}
-          setActiveRequirementId={setActiveRequirementId}
-          setActiveReviewId={setActiveReviewId}
-          setActiveReviewTab={setActiveReviewTab}
-          setActiveSpecId={setActiveSpecId}
-        />
-      ) : route === "dispatch" ? (
-        <DispatchPage
-          activeRequirementId={activeRequirementId}
-          activeSpecId={activeSpecId}
-          navigate={guardedNavigate}
-          setActiveJobId={setActiveJobId}
-          setActiveJobStatus={setActiveJobStatus}
-        />
-      ) : route === "monitor" ? (
-        <MonitorPage activeJobId={activeJobId} activeSpecId={activeSpecId} navigate={guardedNavigate} setActiveJobStatus={setActiveJobStatus} />
-      ) : route === "review" ? (
-        <ReviewPage
-          activeJobId={activeJobId}
-          activeReviewId={activeReviewId}
-          activeReviewTab={activeReviewTab}
-          activeSpecId={activeSpecId}
-          navigate={guardedNavigate}
-          setActiveJobId={setActiveJobId}
-          setActiveJobStatus={setActiveJobStatus}
-          setActiveReviewId={setActiveReviewId}
-          setActiveReviewTab={setActiveReviewTab}
-        />
-      ) : route === "reports" ? (
-        <ReportsPage
-          navigate={guardedNavigate}
-          setActiveJobId={setActiveJobId}
-          setActiveJobStatus={setActiveJobStatus}
-          setActiveReviewId={setActiveReviewId}
-          setActiveReviewTab={setActiveReviewTab}
-        />
-      ) : route === "settings" ? (
-        <SettingsPage navigate={guardedNavigate} />
-      ) : (
-        <ShellPlaceholder route={route} />
-      )}
+      <ErrorBoundary onReset={() => setRoute("library")}>
+        {route === "chat" ? (
+          <ChatPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} setActiveRequirementId={setActiveRequirementId} />
+        ) : route === "followup" ? (
+          <FollowupPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} />
+        ) : route === "spec" ? (
+          <SpecPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} setActiveSpecId={setActiveSpecId} />
+        ) : route === "library" ? (
+          <LibraryPage
+            navigate={guardedNavigate}
+            setActiveJobId={setActiveJobId}
+            setActiveJobStatus={setActiveJobStatus}
+            setActiveRequirementId={setActiveRequirementId}
+            setActiveReviewId={setActiveReviewId}
+            setActiveReviewTab={setActiveReviewTab}
+            setActiveSpecId={setActiveSpecId}
+          />
+        ) : route === "dispatch" ? (
+          <DispatchPage
+            activeRequirementId={activeRequirementId}
+            activeSpecId={activeSpecId}
+            navigate={guardedNavigate}
+            setActiveJobId={setActiveJobId}
+            setActiveJobStatus={setActiveJobStatus}
+          />
+        ) : route === "monitor" ? (
+          <MonitorPage activeJobId={activeJobId} activeSpecId={activeSpecId} navigate={guardedNavigate} setActiveJobStatus={setActiveJobStatus} />
+        ) : route === "review" ? (
+          <ReviewPage
+            activeJobId={activeJobId}
+            activeReviewId={activeReviewId}
+            activeReviewTab={activeReviewTab}
+            activeSpecId={activeSpecId}
+            navigate={guardedNavigate}
+            setActiveJobId={setActiveJobId}
+            setActiveJobStatus={setActiveJobStatus}
+            setActiveReviewId={setActiveReviewId}
+            setActiveReviewTab={setActiveReviewTab}
+          />
+        ) : route === "reports" ? (
+          <ReportsPage
+            navigate={guardedNavigate}
+            setActiveJobId={setActiveJobId}
+            setActiveJobStatus={setActiveJobStatus}
+            setActiveReviewId={setActiveReviewId}
+            setActiveReviewTab={setActiveReviewTab}
+          />
+        ) : route === "settings" ? (
+          <SettingsPage navigate={guardedNavigate} />
+        ) : (
+          <ShellPlaceholder route={route} />
+        )}
+      </ErrorBoundary>
     </AppShell>
   );
 }
