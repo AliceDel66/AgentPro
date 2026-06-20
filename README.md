@@ -102,6 +102,14 @@ cd backend
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
+`/health` 同时承担后端/桌面端契约自检。当前桌面端启动时会先读取：
+
+- `contractVersion`：后端 API 契约版本。
+- `minDesktopContractVersion`：后端要求的最低桌面端契约版本。
+- `capabilities`：后端已启用能力，例如本机 Runner、交付清单、评审详情和优化方案。
+
+如果后端仍是旧进程或能力集缺失，桌面端会停在启动检查页并提示重启后端或重新打包桌面端，避免登录后进入工作区白屏。
+
 ### 4. 启动桌面端
 
 ```bash

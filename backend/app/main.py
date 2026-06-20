@@ -3,13 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.core.version import APP_VERSION
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="AgentPro API",
-        version="0.1.0",
+        version=APP_VERSION,
         docs_url="/docs" if settings.docs_effective else None,
         redoc_url="/redoc" if settings.docs_effective else None,
         openapi_url="/openapi.json" if settings.docs_effective else None,

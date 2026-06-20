@@ -996,3 +996,28 @@
 - Commit：
   - 哈希：本提交
   - 信息：完善 Agent 产物交付文档
+
+### 40. 后端/桌面端版本一致性自检
+- 状态：已完成
+- 完成功能：
+  - 桌面端启动时先检查 `/api/v1/health`，确认后端契约版本和能力集匹配后才恢复登录态
+  - 新增启动拦截页，后端不可达、旧后端进程、契约版本过低或能力缺失时展示明确原因和重新检测按钮
+  - 前端声明 `DESKTOP_CONTRACT_VERSION` 和必要后端 capability，避免只靠应用版本号判断兼容性
+  - README 补充健康检查中的契约自检字段和白屏排障说明
+- 相关文件：
+  - src/App.tsx
+  - src/components/common/BackendContractGate.tsx
+  - src/services/healthService.ts
+  - README.md
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（65 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 cargo check --manifest-path src-tauri/Cargo.toml
+  - 已通过本地 `/api/v1/health` 真实进程检查，确认返回 contractVersion、minDesktopContractVersion 和 capabilities
+  - 已通过 Vite 页面入口 smoke 检查（curl http://127.0.0.1:5173/）
+- Commit：
+  - 哈希：本提交
+  - 信息：完成后端桌面版本一致性自检

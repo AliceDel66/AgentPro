@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "./components/layout/AppShell";
+import { BackendContractGate } from "./components/common/BackendContractGate";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { Spinner } from "./components/common/Spinner";
 import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
@@ -17,15 +18,22 @@ import { SettingsPage } from "./pages/workspace/SettingsPage";
 import { SpecPage } from "./pages/workspace/SpecPage";
 import { ShellPlaceholder } from "./pages/workspace/ShellPlaceholder";
 import { canEnterWorkflowRoute, fallbackRouteForLockedWorkflow } from "./lib/workflow";
+import { evaluateBackendContract, getBackendHealth, type BackendContractCheck } from "./services/healthService";
 import { useAuthStore } from "./stores/authStore";
 import { useWorkflowStore } from "./stores/workflowStore";
 import type { AppRoute } from "./types";
 
 const AUTH_ROUTES: AppRoute[] = ["login", "register", "forgot"];
 
+type ContractState =
+  | { status: "checking" }
+  | { status: "compatible"; check: BackendContractCheck }
+  | { status: "blocked"; check: BackendContractCheck };
+
 export default function App() {
   const [route, setRoute] = useState<AppRoute>("login");
   const [booted, setBooted] = useState(false);
+  const [contractState, setContractState] = useState<ContractState>({ status: "checking" });
   // Workflow context is persisted in the store so a refresh keeps the active project.
   const activeRequirementId = useWorkflowStore((state) => state.activeRequirementId);
   const activeSpecId = useWorkflowStore((state) => state.activeSpecId);
@@ -53,10 +61,45 @@ export default function App() {
     setRoute(nextRoute);
   };
 
-  // Restore the session on startup so a refresh keeps the user logged in.
-  useEffect(() => {
-    void bootstrap().finally(() => setBooted(true));
+  const runStartupCheck = useCallback(async () => {
+    setBooted(false);
+    setContractState({ status: "checking" });
+    try {
+      const result = await getBackendHealth();
+      const check = evaluateBackendContract(result.data);
+      if (!check.compatible) {
+        setContractState({ status: "blocked", check });
+        return;
+      }
+      setContractState({ status: "compatible", check });
+      await bootstrap().catch((error) => {
+        console.error("[AgentPro] 恢复登录状态失败", error);
+      });
+      setBooted(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法连接后端服务，请确认后端 API 已启动并检查网络后重试。";
+      setContractState({
+        status: "blocked",
+        check: {
+          compatible: false,
+          title: "无法连接后端服务",
+          message,
+          issues: [
+            {
+              code: "backend_unreachable",
+              message: "桌面端无法读取 /api/v1/health，请先启动或重启当前代码对应的后端服务。"
+            }
+          ],
+          health: null
+        }
+      });
+    }
   }, [bootstrap]);
+
+  // Restore the session only after the backend/desktop contract is verified.
+  useEffect(() => {
+    void runStartupCheck();
+  }, [runStartupCheck]);
 
   // Once restored, land an authenticated user in the workspace rather than the login page.
   useEffect(() => {
@@ -71,6 +114,14 @@ export default function App() {
       setRoute(fallbackRouteForLockedWorkflow(route, workflowContext));
     }
   }, [authenticated, booted, route, activeRequirementId, activeSpecId, activeJobId, activeJobStatus, activeReviewId]);
+
+  if (contractState.status === "checking") {
+    return <BackendContractGate checking onRetry={runStartupCheck} />;
+  }
+
+  if (contractState.status === "blocked") {
+    return <BackendContractGate check={contractState.check} onRetry={runStartupCheck} />;
+  }
 
   if (!booted) {
     return (

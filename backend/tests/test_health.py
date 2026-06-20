@@ -12,3 +12,7 @@ def test_health_check() -> None:
     assert payload["ok"] is True
     assert payload["data"]["status"] == "ok"
     assert payload["data"]["service"] == "agentpro-api"
+    assert payload["data"]["contractVersion"] >= 2
+    assert payload["data"]["minDesktopContractVersion"] <= 2
+    assert "runner.artifact.delivery-manifest.v1" in payload["data"]["capabilities"]
+    assert "review.delivery-manifest-payload.v1" in payload["data"]["capabilities"]

@@ -806,3 +806,24 @@
 - Commit：
   - 哈希：本提交
   - 信息：完成评审页本机交付结果展示
+
+### 31. 后端桌面契约版本自检
+- 状态：已完成
+- 完成功能：
+  - 新增 `app.core.version` 作为后端应用版本、API 契约版本、最低桌面端契约版本和 capability 的单一声明处
+  - `/api/v1/health` 返回 `contractVersion`、`minDesktopContractVersion` 和 `capabilities`
+  - FastAPI OpenAPI 版本号改为读取统一 `APP_VERSION`
+  - 新增 health 回归断言，确保后端暴露 Runner 交付清单和评审详情所需能力
+- 相关文件：
+  - backend/app/core/version.py
+  - backend/app/main.py
+  - backend/app/modules/health/router.py
+  - backend/tests/test_health.py
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests（65 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过本地 `/api/v1/health` 真实进程检查，确认返回 contractVersion、minDesktopContractVersion 和 capabilities
+- Commit：
+  - 哈希：本提交
+  - 信息：完成后端桌面版本一致性自检
