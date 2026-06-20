@@ -307,6 +307,7 @@ def build_evidence_sources(
                 "artifactId": None,
                 "eventId": event.id,
                 "uri": None,
+                "payload": None,
                 "createdAt": event.created_at.isoformat(),
             }
         )
@@ -322,6 +323,7 @@ def build_evidence_sources(
                 "artifactId": artifact.id,
                 "eventId": None,
                 "uri": artifact.uri,
+                "payload": payload if artifact.kind == "delivery-manifest" else None,
                 "createdAt": artifact.created_at.isoformat(),
             }
         )

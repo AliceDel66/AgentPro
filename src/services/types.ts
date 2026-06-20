@@ -200,6 +200,7 @@ export interface ReviewEvidenceSource {
   artifactId?: string | null;
   eventId?: string | null;
   uri?: string | null;
+  payload?: Record<string, unknown> | null;
   createdAt: string;
 }
 

@@ -15,7 +15,14 @@ import {
   optimizeFromReviewReport,
   requestReviewRework
 } from "../../services/reviewService";
-import type { ReviewActionPlanItem, ReviewEvidenceSource, ReviewReport, ReviewScoreBreakdown } from "../../services/types";
+import type {
+  ReviewActionPlanItem,
+  ReviewEvidenceSource,
+  ReviewReport,
+  ReviewScoreBreakdown,
+  RunnerDeliveryEntrypoint,
+  RunnerDeliveryManifest
+} from "../../services/types";
 import type { Navigate } from "../../types";
 
 type ReviewTab = "overview" | "details" | "evidence" | "plan";
@@ -57,7 +64,7 @@ export function ReviewPage({
   const [creating, setCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [runnerMessage, setRunnerMessage] = useState<string | null>(null);
-  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const acting = action !== null;
 
   useEffect(() => {
@@ -101,7 +108,8 @@ export function ReviewPage({
     };
   }, [activeJobId, activeReviewId, activeSpecId, setActiveReviewId]);
 
-  const localArtifactPath = useMemo(() => firstArtifactPath(report), [report]);
+  const deliveryManifest = useMemo(() => deliveryManifestFromReport(report), [report]);
+  const legacyArtifactPath = useMemo(() => firstArtifactPath(report), [report]);
   const isLegacyReport = Boolean(report) && (!report?.scoreBreakdown?.length || !report?.actionPlan?.length);
 
   const refreshLatestReviewForJob = async (jobId: string, specId?: string | null) => {
@@ -255,17 +263,15 @@ export function ReviewPage({
     }
   };
 
-  const copyArtifactPath = async () => {
-    if (!localArtifactPath) return;
-    await navigator.clipboard?.writeText(localArtifactPath);
-    setCopiedPath(localArtifactPath);
-    window.setTimeout(() => setCopiedPath(null), 1400);
+  const copyText = async (value: string) => {
+    await navigator.clipboard?.writeText(value);
+    setCopiedValue(value);
+    window.setTimeout(() => setCopiedValue(null), 1400);
   };
 
-  const openArtifactPath = async () => {
-    if (!localArtifactPath) return;
+  const openArtifactPath = async (path: string) => {
     try {
-      await openLocalPath(localArtifactPath);
+      await openLocalPath(path);
     } catch (error) {
       const message = error instanceof Error ? error.message : "打开本机目录失败";
       setErrorMessage(message);
@@ -328,10 +334,11 @@ export function ReviewPage({
             <ReportMeta report={report} />
             {isLegacyReport ? <LegacyNotice onRegenerate={() => void handleCompleteReportWithDesktopRunner()} creating={creating} /> : null}
             <ArtifactLocationCard
-              path={localArtifactPath}
-              copied={Boolean(copiedPath)}
-              onCopy={() => void copyArtifactPath()}
-              onOpen={() => void openArtifactPath()}
+              copiedValue={copiedValue}
+              fallbackPath={legacyArtifactPath}
+              manifest={deliveryManifest}
+              onCopy={(value) => void copyText(value)}
+              onOpen={(path) => void openArtifactPath(path)}
               onViewDiff={() => setActiveReviewTab("evidence")}
             />
 
@@ -409,33 +416,79 @@ function LegacyNotice({ creating, onRegenerate }: { creating: boolean; onRegener
 }
 
 function ArtifactLocationCard({
-  path,
-  copied,
+  manifest,
+  fallbackPath,
+  copiedValue,
   onCopy,
   onOpen,
   onViewDiff
 }: {
-  path: string | null;
-  copied: boolean;
-  onCopy: () => void;
-  onOpen: () => void;
+  manifest: RunnerDeliveryManifest | null;
+  fallbackPath: string | null;
+  copiedValue: string | null;
+  onCopy: (value: string) => void;
+  onOpen: (path: string) => void;
   onViewDiff: () => void;
 }) {
-  if (!path) return null;
+  const workspacePath = manifest?.workspacePath ?? fallbackPath;
+  if (!workspacePath) return null;
+  const buildEntry = manifest?.entrypoints.find((item) => item.kind === "build");
+  const readmeEntry = manifest?.entrypoints.find((item) => item.kind === "readme");
+  const changedCount = (manifest?.changedFiles.length ?? 0) + (manifest?.untrackedFiles.length ?? 0);
+
   return (
     <div className="mb-5 rounded-xl border border-agent-border bg-white p-5">
-      <div className="mb-2 flex items-center gap-2 text-base font-semibold text-agent-ink">
-        <ExternalLink size={17} />
-        本机产物位置
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-base font-semibold text-agent-ink">
+          <ExternalLink size={17} />
+          本机交付结果
+        </div>
+        <StatusChip tone={manifest ? "blue" : "orange"}>
+          {manifest ? deliverableTypeLabel(manifest.deliverableType) : "旧任务"}
+        </StatusChip>
       </div>
-      <div className="rounded-[10px] bg-[#F8FAFC] px-3 py-2 font-mono text-[12px] text-agent-secondary">{path}</div>
+      {manifest ? (
+        <>
+          <div className="mb-3 text-[13px] leading-6 text-agent-secondary">{manifest.summary}</div>
+          <div className="mb-3 grid gap-3 md:grid-cols-3">
+            <MiniMetric label="可打开入口" value={String(manifest.entrypoints.length)} />
+            <MiniMetric label="新增/修改文件" value={String(changedCount)} />
+            <MiniMetric label="构建产物" value={manifest.buildArtifactMissing ? "缺失" : "已发现"} />
+          </div>
+        </>
+      ) : (
+        <div className="mb-3 rounded-[10px] bg-orange-50 px-3 py-2 text-[13px] leading-6 text-orange-700">
+          该任务由旧版本生成，只记录了 Runner 工作区，建议重新生成完整报告以获得交付清单。
+        </div>
+      )}
+      <DeliveryPathRow label="Runner 工作区" path={workspacePath} />
+      {manifest?.previewCommand ? (
+        <DeliveryPathRow label="预览命令" path={manifest.previewCommand} />
+      ) : null}
+      {buildEntry ? <DeliveryPathRow label="构建产物" path={buildEntry.path} /> : null}
+      {readmeEntry ? <DeliveryPathRow label="运行说明" path={readmeEntry.path} /> : null}
       <div className="mt-3 flex flex-wrap gap-2">
-        <AppButton type="button" onClick={onOpen}>
-          打开目录
+        <AppButton type="button" onClick={() => onOpen(workspacePath)}>
+          打开工作区
         </AppButton>
-        <AppButton type="button" variant="secondary" onClick={onCopy}>
-          {copied ? "已复制" : "复制路径"}
+        {buildEntry ? (
+          <AppButton type="button" variant="secondary" onClick={() => onOpen(buildEntry.path)}>
+            打开构建产物
+          </AppButton>
+        ) : null}
+        {readmeEntry ? (
+          <AppButton type="button" variant="secondary" onClick={() => onOpen(readmeEntry.path)}>
+            打开 README
+          </AppButton>
+        ) : null}
+        <AppButton type="button" variant="secondary" onClick={() => onCopy(workspacePath)}>
+          {copiedValue === workspacePath ? "已复制" : "复制工作区路径"}
         </AppButton>
+        {manifest?.previewCommand ? (
+          <AppButton type="button" variant="ghost" onClick={() => onCopy(manifest.previewCommand)}>
+            {copiedValue === manifest.previewCommand ? "已复制" : "复制预览命令"}
+          </AppButton>
+        ) : null}
         <AppButton type="button" variant="ghost" onClick={onViewDiff}>
           查看 diff 证据
         </AppButton>
@@ -609,6 +662,15 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function DeliveryPathRow({ label, path }: { label: string; path: string }) {
+  return (
+    <div className="mb-2 grid gap-1 rounded-[10px] bg-[#F8FAFC] px-3 py-2 last:mb-0 md:grid-cols-[96px_1fr] md:items-center">
+      <div className="text-[12px] font-semibold text-agent-muted">{label}</div>
+      <div className="truncate font-mono text-[12px] text-agent-secondary" title={path}>{path}</div>
+    </div>
+  );
+}
+
 function ScoreBreakdownCard({ item }: { item: ReviewScoreBreakdown }) {
   return (
     <div className="rounded-[10px] bg-[#F8FAFC] p-4">
@@ -694,9 +756,58 @@ function EmptyDetail({ text }: { text: string }) {
   return <div className="rounded-[10px] border border-dashed border-agent-border bg-white px-4 py-8 text-center text-[13px] text-agent-muted">{text}</div>;
 }
 
+function readString(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function normalizeEntrypoints(value: unknown): RunnerDeliveryEntrypoint[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const path = readString(record.path);
+      if (!path) return null;
+      return {
+        label: readString(record.label, "入口"),
+        kind: readString(record.kind, "file"),
+        path
+      };
+    })
+    .filter((item): item is RunnerDeliveryEntrypoint => Boolean(item));
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function deliveryManifestFromReport(report: ReviewReport | null): RunnerDeliveryManifest | null {
+  const source = report?.evidenceSources?.find((item) => item.type === "delivery-manifest" && item.payload);
+  const payload = source?.payload;
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const workspacePath = readString(record.workspacePath);
+  if (!workspacePath) return null;
+  return {
+    version: Number(record.version ?? 1),
+    jobId: readString(record.jobId, report?.jobId ?? ""),
+    engine: readString(record.engine, source?.engine ?? "codex"),
+    workspacePath,
+    deliverableType: readString(record.deliverableType, "agentpro_patch"),
+    summary: readString(record.summary, "本次产物已生成交付清单。"),
+    entrypoints: normalizeEntrypoints(record.entrypoints),
+    changedFiles: normalizeStringList(record.changedFiles),
+    untrackedFiles: normalizeStringList(record.untrackedFiles),
+    previewCommand: readString(record.previewCommand),
+    buildArtifactMissing: Boolean(record.buildArtifactMissing),
+    createdAt: readString(record.createdAt, source?.createdAt ?? "")
+  };
+}
+
 function firstArtifactPath(report: ReviewReport | null) {
   if (!report?.evidenceSources?.length) return null;
-  const source = report.evidenceSources.find((item) => item.uri);
+  const source = report.evidenceSources.find((item) => item.type !== "delivery-manifest" && item.uri);
   return source?.uri ?? null;
 }
 
@@ -748,6 +859,16 @@ function priorityClass(value: ReviewActionPlanItem["priority"]) {
 
 function engineLabel(engine?: string | null) {
   return engine === "claude-code" ? "Claude Code" : "Codex";
+}
+
+function deliverableTypeLabel(value: string) {
+  const labels: Record<string, string> = {
+    agentpro_patch: "AgentPro 源码补丁",
+    in_app_agent: "内置 Agent",
+    external_connector: "外部连接器",
+    standalone_service: "独立服务"
+  };
+  return labels[value] ?? value;
 }
 
 function formatDate(value?: string) {

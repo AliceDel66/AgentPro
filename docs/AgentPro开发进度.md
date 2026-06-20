@@ -954,3 +954,27 @@
 - Commit：
   - 哈希：本提交
   - 信息：完成 Runner 交付清单生成与上报
+
+### 38. 评审页本机交付结果展示
+- 状态：已完成
+- 完成功能：
+  - 评审证据源支持安全透传 `delivery-manifest` payload，前端可读取交付入口
+  - 自动评审页将“本机产物位置”改为“本机交付结果”
+  - 有交付清单时展示交付类型、Runner 工作区、构建产物、README、预览命令、入口数量和新增/修改文件数量
+  - 旧任务缺少交付清单时展示兼容提示，只保留打开 Runner 工作区能力，不再误导为最终产物目录
+  - Mock 评审报告补齐 `delivery-manifest` 示例，避免离线 UI 缺失交付入口
+- 相关文件：
+  - backend/app/modules/review/analyzer.py
+  - backend/app/modules/review/schemas.py
+  - backend/tests/test_review.py
+  - src/pages/workspace/ReviewPage.tsx
+  - src/services/reviewService.ts
+  - src/services/types.ts
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_review.py（8 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+- Commit：
+  - 哈希：本提交
+  - 信息：完成评审页本机交付结果展示

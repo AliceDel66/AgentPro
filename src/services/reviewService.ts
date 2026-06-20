@@ -32,6 +32,33 @@ const mockReview: ReviewReport = {
       summary: "本机 Runner 执行完成，测试通过。",
       artifactId: "mock-run-log",
       createdAt: new Date().toISOString()
+    },
+    {
+      id: "artifact:mock-delivery",
+      type: "delivery-manifest",
+      engine: "claude-code",
+      summary: "本次产物是 AgentPro 源码补丁，而不是独立安装包。",
+      artifactId: "mock-delivery",
+      uri: "/Users/demo/AgentPro/runs/job_mock_parallel_001/claude-code/agentpro-delivery.json",
+      payload: {
+        version: 1,
+        jobId: "job_mock_parallel_001",
+        engine: "claude-code",
+        workspacePath: "/Users/demo/AgentPro/runs/job_mock_parallel_001/claude-code",
+        deliverableType: "agentpro_patch",
+        summary: "本次产物是 AgentPro 源码补丁，而不是独立安装包。",
+        entrypoints: [
+          { label: "Runner 工作区", kind: "workspace", path: "/Users/demo/AgentPro/runs/job_mock_parallel_001/claude-code" },
+          { label: "构建产物", kind: "build", path: "/Users/demo/AgentPro/runs/job_mock_parallel_001/claude-code/dist/index.html" },
+          { label: "运行说明", kind: "readme", path: "/Users/demo/AgentPro/runs/job_mock_parallel_001/claude-code/README.md" }
+        ],
+        changedFiles: ["src/pages/workspace/AgentsPage.tsx"],
+        untrackedFiles: ["src/pages/workspace/AgentRunPage.tsx"],
+        previewCommand: "npm run preview -- --host 127.0.0.1",
+        buildArtifactMissing: false,
+        createdAt: new Date().toISOString()
+      },
+      createdAt: new Date().toISOString()
     }
   ],
   actionPlan: [

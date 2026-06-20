@@ -787,3 +787,22 @@
 - Commit：
   - 哈希：本提交
   - 信息：完成 Runner 交付清单生成与上报
+
+### 30. 评审证据源交付清单透传
+- 状态：已完成
+- 完成功能：
+  - `ReviewEvidenceSourcePayload` 新增可选 `payload`
+  - 仅对 `delivery-manifest` 证据源透传 artifact payload，供前端展示交付入口
+  - 评审页可读取交付清单中的工作区、构建产物、README、预览命令和文件统计
+  - 旧报告缺少交付清单时保持兼容，不影响评审详情页渲染
+- 相关文件：
+  - backend/app/modules/review/analyzer.py
+  - backend/app/modules/review/schemas.py
+  - backend/tests/test_review.py
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests/test_review.py（8 passed）
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+- Commit：
+  - 哈希：本提交
+  - 信息：完成评审页本机交付结果展示

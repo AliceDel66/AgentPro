@@ -35,6 +35,7 @@ class ReviewEvidenceSourcePayload(BaseModel):
     artifactId: str | None = None
     eventId: str | None = None
     uri: str | None = None
+    payload: dict[str, Any] | None = None
     createdAt: str
 
 
