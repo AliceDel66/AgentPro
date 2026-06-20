@@ -43,16 +43,26 @@ function clearStoredTokens(): void {
 }
 
 const NETWORK_ERROR_MESSAGE = "无法连接后端服务，请确认后端 API 已启动并检查网络后重试。";
+const TIMEOUT_ERROR_MESSAGE = "请求超时，请检查后端服务或网络后重试。";
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 // fetch() throws a bare TypeError on network-level failure — "Load failed" in the Tauri/WebKit
 // runtime, "Failed to fetch" in Chromium. Convert it to one clear, actionable message so pages
-// never surface the cryptic raw text.
-async function safeFetch(path: string, init: RequestInit): Promise<Response> {
+// never surface the cryptic raw text. A timeout (skipped for streaming) also stops a stuck
+// request from hanging forever and eventually surfacing as "Load failed".
+async function safeFetch(path: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    return await fetch(`${apiBaseUrl}${path}`, init);
+    return await fetch(`${apiBaseUrl}${path}`, { ...init, signal: controller?.signal });
   } catch (error) {
+    if (controller?.signal.aborted) {
+      throw new Error(TIMEOUT_ERROR_MESSAGE);
+    }
     console.error("[AgentPro] 请求后端失败", `${apiBaseUrl}${path}`, error);
     throw new Error(NETWORK_ERROR_MESSAGE);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -115,11 +125,15 @@ async function authedFetch(path: string, init: { method: string; body?: string }
 
 async function authedStreamFetch(path: string, body: string): Promise<Response> {
   const send = () =>
-    safeFetch(path, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body
-    });
+    safeFetch(
+      path,
+      {
+        method: "POST",
+        headers: buildJsonHeaders(),
+        body
+      },
+      0 // streaming responses are long-lived; never time them out
+    );
 
   const response = await send();
   if (response.status === 401 && !path.startsWith("/auth/")) {
