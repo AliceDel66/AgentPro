@@ -851,3 +851,28 @@
 - Commit：
   - 哈希：本提交
   - 信息：修复后端 Docker 打包忽略规则并记录部署验收
+
+### 33. 远程后端配置同步与 HTTPS 入口
+- 状态：已完成
+- 完成功能：
+  - 已将本地 `backend/.env` 同步到服务器 `/opt/agentpro/backend/.env`
+  - 服务器 `.env` 权限已设置为 `600`
+  - 已重建远端 `api` 容器并验证 Alembic 迁移仍为 `20260618_0002 (head)`
+  - Nginx 新增 `http://82.158.226.253/api/v1/` 到后端 API 的代理入口，用于绕开公网 `8000` 访问异常
+  - Nginx 在 `https://api.zgonline.top/agentpro/api/v1/` 增加 AgentPro 后端代理入口，用于桌面端生产包 HTTPS 访问
+  - 未将数据库密码、SMTP 密码、API Key 或服务器密码写入 Git
+- 相关文件：
+  - backend/.env（服务器私有文件，未提交）
+  - /etc/nginx/conf.d/agentpro.conf（服务器配置）
+  - /etc/nginx/sites-available/sub2api.conf（服务器配置）
+  - docs/AgentPro后端部署.md
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已通过服务器 `docker compose ps`，`api` healthy，`redis` Up
+  - 已通过 `curl http://127.0.0.1:8000/api/v1/health`
+  - 已通过 `curl http://82.158.226.253/api/v1/health`
+  - 已通过 `curl https://api.zgonline.top/agentpro/api/v1/health`
+  - 已通过 `Origin: tauri://localhost` CORS 检查
+- Commit：
+  - 哈希：本提交
+  - 信息：允许桌面端连接远程后端并记录打包验收

@@ -13,6 +13,40 @@
 - 健康检查：`http://82.158.226.253:8000/api/v1/health`
 - 注意：服务器本机访问公网 IP 与 `127.0.0.1` 均已验证返回 `ok: true`；如本地电脑直连出现 `Empty reply from server`，优先检查云厂商安全组、防火墙、运营商入站策略或端口开放规则。
 
+## Nginx HTTPS 入口
+服务器公网 `8000` 在部分本地网络下会出现连接建立但 HTTP 无响应的问题。桌面端生产包统一使用 Nginx HTTPS 前缀入口：
+
+```text
+https://api.zgonline.top/agentpro/api/v1
+```
+
+对应 Nginx location：
+
+```nginx
+location /agentpro/api/v1/ {
+    proxy_pass http://127.0.0.1:8000/api/v1/;
+    proxy_connect_timeout 60s;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_cache off;
+}
+```
+
+本地桌面端打包环境：
+
+```bash
+VITE_AGENTPRO_SERVER_URL=https://api.zgonline.top/agentpro/api/v1
+VITE_AGENTPRO_MOCK_API=false
+```
+
+Tauri 打包后 WebView 还需要在 `src-tauri/tauri.conf.json` 的 CSP 中允许 `connect-src https://api.zgonline.top`。
+
 ## 服务器目录
 ```bash
 mkdir -p /opt/agentpro

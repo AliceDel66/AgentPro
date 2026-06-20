@@ -1021,3 +1021,27 @@
 - Commit：
   - 哈希：本提交
   - 信息：完成后端桌面版本一致性自检
+
+### 41. 远程后端桌面端打包与安装
+- 状态：已完成
+- 完成功能：
+  - 桌面端生产环境后端地址切换为 `https://api.zgonline.top/agentpro/api/v1`
+  - Tauri CSP 显式允许连接 `https://api.zgonline.top`，避免打包后 WebView 启动检查无法访问远程后端
+  - 使用 `tauri build --bundles app,dmg` 重新生成 macOS `.app` 和 `.dmg`
+  - 已覆盖安装到 `/Applications/AgentPro.app`
+  - 本地 `.env.local` 和 `.env.production.local` 已配置远程后端地址，且被 Git 忽略
+- 相关文件：
+  - src-tauri/tauri.conf.json
+  - docs/AgentPro开发进度.md
+  - docs/AgentPro后端开发进度.md
+  - docs/AgentPro后端部署.md
+- 验证结果：
+  - 已通过 `npm run typecheck`
+  - 已通过 `cargo check --manifest-path src-tauri/Cargo.toml`
+  - 已通过 `npm run tauri -- build --bundles app,dmg`
+  - 已确认 dist 中只包含 `https://api.zgonline.top/agentpro/api/v1`，不再包含公网 `:8000` 地址
+  - 已通过 `https://api.zgonline.top/agentpro/api/v1/health` 和 `Origin: tauri://localhost` CORS 检查
+  - 已通过桌面端真机 smoke，启动检查通过并进入登录页
+- Commit：
+  - 哈希：本提交
+  - 信息：允许桌面端连接远程后端并记录打包验收
