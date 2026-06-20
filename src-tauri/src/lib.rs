@@ -83,6 +83,22 @@ fn safe_path(input: &str) -> Result<String, String> {
     Ok(path.to_string_lossy().to_string())
 }
 
+fn expand_user_path(input: &str) -> PathBuf {
+    if let Some(rest) = input.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home).join(rest);
+        }
+    }
+    PathBuf::from(input)
+}
+
+fn default_runner_workspace_root_path() -> PathBuf {
+    if let Some(home) = std::env::var_os("HOME") {
+        return PathBuf::from(home).join("AgentPro").join("runs");
+    }
+    std::env::temp_dir().join("agentpro-runs")
+}
+
 fn default_repo_path() -> Result<PathBuf, String> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     if let Some(parent) = manifest_dir.parent() {
@@ -141,8 +157,8 @@ fn prepare_local_workspace(
 ) -> Result<PathBuf, String> {
     let root = workspace_root
         .filter(|value| !value.trim().is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join("agentpro-runs"));
+        .map(|value| expand_user_path(value.trim()))
+        .unwrap_or_else(default_runner_workspace_root_path);
     let workdir = root.join(job_id).join(engine);
     if workdir.exists() {
         fs::remove_dir_all(&workdir).map_err(|error| error.to_string())?;
@@ -251,6 +267,42 @@ fn open_local_path(path: String) -> Result<(), String> {
     } else {
         Err(format!("打开路径失败，退出码：{}", status))
     }
+}
+
+#[tauri::command]
+fn get_default_runner_workspace_root() -> Result<String, String> {
+    let root = default_runner_workspace_root_path();
+    fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+    Ok(root.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn select_runner_workspace_root() -> Result<Option<String>, String> {
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg("POSIX path of (choose folder with prompt \"选择 AgentPro Runner 保存目录\")")
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        if stderr.to_lowercase().contains("user canceled") || stderr.contains("-128") {
+            return Ok(None);
+        }
+        return Err(if stderr.trim().is_empty() {
+            "选择目录失败".to_string()
+        } else {
+            stderr
+        });
+    }
+
+    let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if selected.is_empty() {
+        return Ok(None);
+    }
+    let path = PathBuf::from(selected);
+    fs::create_dir_all(&path).map_err(|error| error.to_string())?;
+    Ok(Some(path.to_string_lossy().trim_end_matches('/').to_string()))
 }
 
 #[tauri::command]
@@ -364,6 +416,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             detect_agent_cli,
             open_local_path,
+            get_default_runner_workspace_root,
+            select_runner_workspace_root,
             build_agent_runner_command,
             start_agent_runner,
             execute_agent_runner

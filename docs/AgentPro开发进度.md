@@ -904,3 +904,25 @@
 - Commit：
   - 哈希：本提交
   - 信息：修复登录白屏与桌面启动稳定性
+
+### 36. Runner 保存目录配置
+- 状态：已完成
+- 完成功能：
+  - 桌面端默认 Runner 保存目录从系统临时目录调整为 `~/AgentPro/runs`
+  - Tauri 新增默认 Runner 目录读取和系统目录选择命令，选择后会自动创建目录
+  - 新增 `runnerSettingsStore`，使用 zustand persist 持久化用户自定义保存目录
+  - 设置页 Runner 配置区新增“选择目录 / 恢复默认 / 打开目录”，并展示当前生效目录
+  - 本机真实 Runner 执行时优先使用用户自定义目录，其次使用环境变量，最后使用默认目录
+- 相关文件：
+  - src-tauri/src/lib.rs
+  - src/services/localPathService.ts
+  - src/services/localRunnerService.ts
+  - src/stores/runnerSettingsStore.ts
+  - src/pages/workspace/SettingsPage.tsx
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 npm run typecheck
+  - 已通过 cargo check --manifest-path src-tauri/Cargo.toml
+- Commit：
+  - 哈希：本提交
+  - 信息：完成 Runner 保存目录配置

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Lock, Shield, TriangleAlert } from "lucide-react";
+import { CheckCircle2, FolderOpen, Lock, RotateCcw, Shield, TriangleAlert } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
+import { getDefaultRunnerWorkspaceRoot, isTauriRuntime, openLocalPath, selectRunnerWorkspaceRoot } from "../../services/localPathService";
 import { getModelConfig } from "../../services/modelService";
 import type { ModelProviderConfig } from "../../services/types";
 import { getUserAvatarInitial, getUserDisplayName, useAuthStore } from "../../stores/authStore";
+import { FALLBACK_RUNNER_WORKSPACE_ROOT, useRunnerSettingsStore } from "../../stores/runnerSettingsStore";
 import type { Navigate } from "../../types";
 
 interface SettingsPageProps {
@@ -16,18 +18,43 @@ export function SettingsPage({ navigate }: SettingsPageProps) {
   const [modelConfig, setModelConfig] = useState<ModelProviderConfig | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [loadingModel, setLoadingModel] = useState(true);
+  const [defaultWorkspaceRoot, setDefaultWorkspaceRoot] = useState(FALLBACK_RUNNER_WORKSPACE_ROOT);
+  const [workspaceMessage, setWorkspaceMessage] = useState<string | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [selectingWorkspace, setSelectingWorkspace] = useState(false);
   const user = useAuthStore((state) => state.user);
   const authStatus = useAuthStore((state) => state.status);
   const userError = useAuthStore((state) => state.error);
   const refreshCurrentUser = useAuthStore((state) => state.refreshCurrentUser);
+  const workspaceRoot = useRunnerSettingsStore((state) => state.workspaceRoot);
+  const setWorkspaceRoot = useRunnerSettingsStore((state) => state.setWorkspaceRoot);
+  const resetWorkspaceRoot = useRunnerSettingsStore((state) => state.resetWorkspaceRoot);
   const displayName = getUserDisplayName(user);
   const avatarInitial = getUserAvatarInitial(user);
   const loadingUser = authStatus === "loading" && !user;
   const accountSyncMessage = authStatus === "loading" ? "正在同步账号数据..." : "账号数据已与后端同步";
+  const effectiveWorkspaceRoot = workspaceRoot ?? defaultWorkspaceRoot;
 
   useEffect(() => {
     void refreshCurrentUser();
   }, [refreshCurrentUser]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDefaultWorkspaceRoot() {
+      try {
+        const root = await getDefaultRunnerWorkspaceRoot();
+        if (!cancelled) setDefaultWorkspaceRoot(root);
+      } catch {
+        if (!cancelled) setDefaultWorkspaceRoot(FALLBACK_RUNNER_WORKSPACE_ROOT);
+      }
+    }
+
+    void loadDefaultWorkspaceRoot();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +76,43 @@ export function SettingsPage({ navigate }: SettingsPageProps) {
       cancelled = true;
     };
   }, []);
+
+  const handleSelectWorkspaceRoot = async () => {
+    setWorkspaceError(null);
+    setWorkspaceMessage(null);
+    if (!isTauriRuntime()) {
+      setWorkspaceError("当前是 Web 预览环境，目录选择仅在桌面端可用。");
+      return;
+    }
+    setSelectingWorkspace(true);
+    try {
+      const selected = await selectRunnerWorkspaceRoot();
+      if (selected) {
+        setWorkspaceRoot(selected);
+        setWorkspaceMessage("保存目录已更新，后续真实开发任务会写入该目录。");
+      }
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "选择保存目录失败");
+    } finally {
+      setSelectingWorkspace(false);
+    }
+  };
+
+  const handleResetWorkspaceRoot = () => {
+    resetWorkspaceRoot();
+    setWorkspaceError(null);
+    setWorkspaceMessage("已恢复默认保存目录。");
+  };
+
+  const handleOpenWorkspaceRoot = async () => {
+    setWorkspaceError(null);
+    setWorkspaceMessage(null);
+    try {
+      await openLocalPath(effectiveWorkspaceRoot);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "打开保存目录失败");
+    }
+  };
 
   return (
     <div className="flex-1 overflow-y-auto bg-agent-bg px-9 py-8 pb-24">
@@ -114,6 +178,33 @@ export function SettingsPage({ navigate }: SettingsPageProps) {
         </Card>
 
         <Card title="Runner 配置">
+          <div className="mb-5 rounded-[10px] bg-[#F8FAFC] px-[18px] py-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-agent-ink">Agent 开发保存目录</div>
+                <div className="mt-1 text-xs text-agent-muted">
+                  {workspaceRoot ? "用户自定义目录" : "默认目录"} · 真实开发任务会按 Job ID 和引擎创建隔离工作区
+                </div>
+              </div>
+              <StatusChip tone={workspaceRoot ? "blue" : "gray"}>{workspaceRoot ? "已自定义" : "默认"}</StatusChip>
+            </div>
+            <div className="mb-3 rounded-lg bg-white px-3 py-2 font-mono text-[12px] text-agent-secondary">{effectiveWorkspaceRoot}</div>
+            {workspaceMessage ? <div className="mb-3 text-xs font-medium text-agent-success">{workspaceMessage}</div> : null}
+            {workspaceError ? <div className="mb-3 text-xs font-medium text-agent-danger">{workspaceError}</div> : null}
+            <div className="flex flex-wrap gap-2">
+              <AppButton loading={selectingWorkspace} type="button" variant="secondary" onClick={() => void handleSelectWorkspaceRoot()}>
+                <FolderOpen size={15} />
+                {selectingWorkspace ? "选择中..." : "选择目录"}
+              </AppButton>
+              <AppButton type="button" variant="ghost" onClick={handleResetWorkspaceRoot}>
+                <RotateCcw size={15} />
+                恢复默认
+              </AppButton>
+              <AppButton type="button" variant="ghost" onClick={() => void handleOpenWorkspaceRoot()}>
+                打开目录
+              </AppButton>
+            </div>
+          </div>
           <Runner badge="可用" code="Cx" name="Codex Runner" sub="OpenAI Codex CLI" />
           <Runner badge="可用" code="Cl" name="Claude Code Runner" sub="Anthropic Claude Code" accent="claude" />
         </Card>

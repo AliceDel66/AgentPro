@@ -8,6 +8,7 @@ import {
   leaseRunnerJob
 } from "./runnerService";
 import type { RunnerJob, RunnerPackage } from "./types";
+import { getStoredRunnerWorkspaceRoot } from "../stores/runnerSettingsStore";
 
 interface CliDetection {
   engine: "codex" | "claude-code";
@@ -38,9 +39,10 @@ function isTauriRuntime() {
 }
 
 function localRunnerConfig() {
+  const savedWorkspaceRoot = getStoredRunnerWorkspaceRoot();
   return {
     repoPath: import.meta.env.VITE_AGENTPRO_LOCAL_REPO_PATH?.trim() || undefined,
-    workspaceRoot: import.meta.env.VITE_AGENTPRO_LOCAL_WORKSPACE_ROOT?.trim() || undefined
+    workspaceRoot: savedWorkspaceRoot || import.meta.env.VITE_AGENTPRO_LOCAL_WORKSPACE_ROOT?.trim() || undefined
   };
 }
 
