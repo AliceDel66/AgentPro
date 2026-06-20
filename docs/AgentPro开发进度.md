@@ -978,3 +978,21 @@
 - Commit：
   - 哈希：本提交
   - 信息：完成评审页本机交付结果展示
+
+### 39. Agent 产物交付文档完善
+- 状态：已完成
+- 完成功能：
+  - README 补充 Runner 默认保存目录、自定义保存目录、交付清单和评审页“本机交付结果”说明
+  - Agent 交付与使用设计文档补充 `agentpro-delivery.json`、`delivery-manifest` artifact 和 entrypoints 约定
+  - 明确默认工作区结构为 `~/AgentPro/runs/<jobId>/<engine>/`
+  - 明确当前交付类型先以 `agentpro_patch` 表达 AgentPro 源码补丁，后续扩展为正式 Agent 成品类型
+- 相关文件：
+  - README.md
+  - docs/AgentPro-Agent交付与使用设计.md
+  - docs/AgentPro开发进度.md
+- 验证结果：
+  - 已通过 git diff --check
+  - 已完成敏感信息扫描，文档仅包含占位符、路径约定和安全说明，未发现真实密钥
+- Commit：
+  - 哈希：本提交
+  - 信息：完善 Agent 产物交付文档

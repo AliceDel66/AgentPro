@@ -17,6 +17,8 @@ AgentPro 是一个面向技术小白的桌面端 Agent 开发助手。它通过�
 - 严格 workflow：需求访谈 -> 需求草案 -> 开发调度 -> 并行监控 -> 自动评审。
 - 需求库作为工作流中心，展示开发状态、开发方式、评审分和下一步操作。
 - 桌面端调用用户本机 Codex / Claude Code CLI，后端只保存任务状态、日志和产物证据。
+- Runner 默认把开发工作区保存到 `~/AgentPro/runs`，也可在设置页自定义 Agent 开发保存目录。
+- 每次真实开发完成后生成 `agentpro-delivery.json` 交付清单，评审页可打开工作区、构建产物、README 并复制预览命令。
 - 自动评审报告包含总览、详细报告、证据链、优化方案和交付建议。
 - 报告档案支持查看历史报告、补全旧报告、重新生成报告和基于报告发起优化。
 
@@ -134,7 +136,7 @@ VITE_AGENTPRO_LOCAL_WORKSPACE_ROOT=/path/to/agentpro-workspaces
 
 - `VITE_AGENTPRO_SERVER_URL` 用于指定后端地址。为空时使用 `/api/v1`。
 - `VITE_AGENTPRO_LOCAL_REPO_PATH` 是本机 Runner 的基础项目路径，可用于让 Codex / Claude Code 在指定项目上开发。
-- `VITE_AGENTPRO_LOCAL_WORKSPACE_ROOT` 是 Agent 开发产物保存根目录。Runner 会在该目录下创建隔离工作区。
+- `VITE_AGENTPRO_LOCAL_WORKSPACE_ROOT` 是 Agent 开发产物保存根目录。桌面端设置页中的用户选择优先级更高；均未配置时默认使用 `~/AgentPro/runs`。
 
 临时启用前端 mock，仅开发环境有效：
 
@@ -154,9 +156,29 @@ AgentPro 不在云端服务器直接运行 Codex / Claude Code。真实开发由
 4. Tauri 命令桥检测本机 `codex` / `claude` CLI。
 5. 在隔离工作区执行开发任务。
 6. 将 stdout、stderr、diff、run-log、test-report 等证据回传后端。
-7. 后端基于证据生成评审报告。
+7. 在工作区生成 `agentpro-delivery.json`，记录工作区、构建产物、README、修改文件、未跟踪文件和预览命令。
+8. 后端基于证据和交付清单生成评审报告。
 
 如果 CLI 不可用或执行器无心跳，任务会被标记为 `blocked` 或 `failed`，监控页会显示错误事件。
+
+默认工作区结构：
+
+```text
+~/AgentPro/runs/<jobId>/<engine>/
+├── agentpro-runner-prompt.md
+├── agentpro-delivery.json
+├── dist/
+├── README.md
+└── ...
+```
+
+评审详情页的“本机交付结果”会优先读取 `delivery-manifest` artifact：
+
+- 打开 Runner 工作区
+- 打开构建产物（如存在 `dist/index.html`）
+- 打开 README
+- 复制本地预览命令
+- 查看 diff 证据
 
 ## 常用命令
 
