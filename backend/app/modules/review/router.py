@@ -150,12 +150,22 @@ async def resolve_review_context(
     return job, spec
 
 
+# A review may only be generated once its dev job has actually finished, so a queued/running
+# job cannot be turned into a "reviewed" result (closes the forge-completion trust gap).
+TERMINAL_JOB_STATUSES = {"completed", "completed_with_warnings", "failed", "blocked"}
+
+
 async def create_review_record(
     session: AsyncSession,
     user_id: str,
     job: DevJob | None,
     spec: AgentSpec | None,
 ) -> ReviewReport:
+    if job is not None and job.status not in TERMINAL_JOB_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="开发任务尚未结束，无法生成评审报告",
+        )
     event_result = (
         await session.execute(select(DevJobEvent).where(DevJobEvent.job_id == job.id))
         if job

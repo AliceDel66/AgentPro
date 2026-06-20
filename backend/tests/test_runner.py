@@ -257,7 +257,7 @@ async def test_runner_execute_invokes_available_cli(
         headers=headers,
         json={
             "engine": "codex",
-            "kind": "manual-note",
+            "kind": "test-report",
             "summary": "artifact endpoint remains compatible",
             "payload": {},
         },

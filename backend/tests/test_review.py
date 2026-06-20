@@ -34,6 +34,21 @@ async def create_owned_spec(client: AsyncClient, headers: dict[str, str]) -> str
     return spec_response.json()["data"]["id"]
 
 
+async def drive_job_terminal(
+    client: AsyncClient, headers: dict[str, str], job_id: str, *, status: str = "completed"
+) -> None:
+    """Move a job to a terminal state via the legitimate lease -> running -> done flow,
+    so a review can be generated against it."""
+    await client.post(
+        f"/api/v1/dev-jobs/{job_id}/lease", headers=headers, json={"runnerId": "desktop-local"}
+    )
+    await client.post(
+        f"/api/v1/dev-jobs/{job_id}/events",
+        headers=headers,
+        json={"phase": "done", "message": "runner finished", "status": status, "progress": 100},
+    )
+
+
 async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
     headers = await review_auth_headers(api_client)
     spec_id = await create_owned_spec(api_client, headers)
@@ -84,6 +99,7 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
             "payload": {"tests": "passed"},
         },
     )
+    await drive_job_terminal(api_client, headers, job_id)
 
     review_response = await api_client.post(
         "/api/v1/reviews",
@@ -139,6 +155,7 @@ async def test_latest_review_reads_without_creating(api_client: AsyncClient) -> 
         "/api/v1/dev-jobs", headers=headers, json={"strategy": "codex", "specId": spec_id}
     )
     job_id = job_response.json()["data"]["id"]
+    await drive_job_terminal(api_client, headers, job_id)
 
     # No report yet: latest returns null instead of creating one.
     empty = await api_client.get(f"/api/v1/reviews/latest?jobId={job_id}", headers=headers)
@@ -167,10 +184,12 @@ async def test_review_list_returns_only_current_user_reports(api_client: AsyncCl
         headers=owner,
         json={"strategy": "codex", "specId": owner_spec_id},
     )
+    owner_job_id = owner_job.json()["data"]["id"]
+    await drive_job_terminal(api_client, owner, owner_job_id)
     owner_review = await api_client.post(
         "/api/v1/reviews",
         headers=owner,
-        json={"jobId": owner_job.json()["data"]["id"]},
+        json={"jobId": owner_job_id},
     )
     assert owner_review.status_code == 200
 
@@ -181,10 +200,12 @@ async def test_review_list_returns_only_current_user_reports(api_client: AsyncCl
         headers=other,
         json={"strategy": "codex", "specId": other_spec_id},
     )
+    other_job_id = other_job.json()["data"]["id"]
+    await drive_job_terminal(api_client, other, other_job_id)
     await api_client.post(
         "/api/v1/reviews",
         headers=other,
-        json={"jobId": other_job.json()["data"]["id"]},
+        json={"jobId": other_job_id},
     )
 
     list_response = await api_client.get("/api/v1/reviews", headers=owner)
@@ -210,12 +231,18 @@ async def test_review_report_marks_evidence_gap_without_artifacts(
         json={"strategy": "codex", "specId": spec_id},
     )
     job_id = job_response.json()["data"]["id"]
+    # Job finished but produced no artifacts -> a legitimate evidence-gap review.
+    await drive_job_terminal(api_client, headers, job_id)
 
     created = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
 
     assert created.status_code == 200
     report = created.json()["data"]
-    assert report["evidenceSources"] == []
+    # Lifecycle events may appear, but there is no artifact-based evidence (run-log/test/diff).
+    assert not any(
+        item["type"] in {"run-log", "test-report", "diff-summary"}
+        for item in report["evidenceSources"]
+    )
     assert any(item["id"] == "plan-evidence-gap" for item in report["actionPlan"])
     assert any("证据不足" in item["reason"] for item in report["actionPlan"])
     assert any(
@@ -235,6 +262,7 @@ async def test_review_regenerate_creates_new_report_from_same_context(
         json={"strategy": "codex", "specId": spec_id},
     )
     job_id = job_response.json()["data"]["id"]
+    await drive_job_terminal(api_client, headers, job_id)
     created = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
     review_id = created.json()["data"]["id"]
 
@@ -267,6 +295,7 @@ async def test_review_optimize_creates_source_review_job_for_desktop_runner(
         headers=headers,
         json={"phase": "tests", "message": "pytest missing retry coverage", "progress": 60},
     )
+    await drive_job_terminal(api_client, headers, job_id, status="completed_with_warnings")
     created = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
     review_id = created.json()["data"]["id"]
 
@@ -294,6 +323,19 @@ async def test_review_optimize_creates_source_review_job_for_desktop_runner(
     )
     assert "等待桌面端本机 Runner 执行" in events_response.text
     assert "sourceReviewId" in events_response.text
+
+
+async def test_review_rejects_non_terminal_job(api_client: AsyncClient) -> None:
+    headers = await register_headers(api_client, "nonterminal@example.com")
+    spec_id = await create_owned_spec(api_client, headers)
+    job_response = await api_client.post(
+        "/api/v1/dev-jobs", headers=headers, json={"strategy": "codex", "specId": spec_id}
+    )
+    job_id = job_response.json()["data"]["id"]
+
+    # Job is still queued (no real execution) -> a review must not be generated.
+    response = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
+    assert response.status_code == 409
 
 
 async def test_review_rejects_other_users_spec(api_client: AsyncClient) -> None:

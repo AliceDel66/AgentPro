@@ -60,9 +60,19 @@ class DevJobEventCreate(BaseModel):
     status: RunnerJobStatus | None = None
 
 
+RunnerArtifactKind = Literal[
+    "run-log",
+    "diff-summary",
+    "test-report",
+    "security-scan",
+    "secret-scan",
+    "runner-unavailable",
+]
+
+
 class DevJobArtifactCreate(BaseModel):
     engine: Literal["codex", "claude-code"]
-    kind: str = Field(min_length=1, max_length=48)
+    kind: RunnerArtifactKind
     summary: str | None = None
     uri: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
