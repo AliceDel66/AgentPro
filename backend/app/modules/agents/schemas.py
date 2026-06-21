@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DeliveredAgent(BaseModel):
@@ -10,3 +10,9 @@ class DeliveredAgent(BaseModel):
     reviewId: str
     deliveryMode: str
     objective: str
+
+
+class AgentRunRequest(BaseModel):
+    """A single in-app run request for a delivered Agent."""
+
+    input: str = Field(min_length=1, max_length=8000)
