@@ -125,6 +125,35 @@ COPYFILE_DISABLE=1 tar --no-xattrs \
   -czf /tmp/agentpro-backend.tar.gz backend
 ```
 
+## 自动部署（push 即更新）
+推送到 `feature/agentpro-backend` 且改动 `backend/**` 时，GitHub Actions 自动 SSH 到服务器
+更新后端容器。链路：`.github/workflows/deploy-backend.yml` → 服务器 `git reset --hard` →
+`backend/scripts/deploy-remote.sh`（构建 → `alembic upgrade head` → `up -d` → 健康检查）。
+
+关键不变量：部署脚本只构建/迁移/重启，**绝不执行 `git clean`**，以保留未跟踪的
+`backend/.env`（生产配置不在 Git 中）。迁移在「构建后、启动前」执行，失败即中止、旧容器继续服务。
+
+### 一次性配置（仓库 Secrets）
+仓库 → Settings → Secrets and variables → Actions 新增：
+
+| Secret | 值 | 说明 |
+| --- | --- | --- |
+| `DEPLOY_SSH_HOST` | `82.158.226.253` | 服务器地址 |
+| `DEPLOY_SSH_USER` | 如 `root` | 登录用户 |
+| `DEPLOY_SSH_KEY` | SSH 私钥（PEM 整段） | 对应公钥需在服务器 `~/.ssh/authorized_keys` |
+| `DEPLOY_SSH_PORT` | `22` | 可选，默认 22 |
+| `DEPLOY_REPO_DIR` | `/opt/agentpro` | 服务器仓库根目录 |
+
+### 一次性服务器前置
+1. `/opt/agentpro` 是 Git 克隆且 `origin` 指向 `git@github.com:AliceDel66/AgentPro.git`，
+   并已配置好对 GitHub 的拉取权限（私有仓库需部署密钥/凭据），`git fetch` 可用。
+2. 已装 `git` / `docker` / `docker compose` / `curl`，且部署用户在 docker 组内。
+3. `backend/.env` 已存在（生产配置）——脚本检测不到会直接中止。
+
+### 手动触发 / 手动部署
+- 手动触发：仓库 Actions 页选择「Deploy backend」→ Run workflow。
+- 服务器手动：`cd /opt/agentpro && git pull && bash backend/scripts/deploy-remote.sh`。
+
 ## 验收
 ```bash
 curl http://<SERVER_IP>:8000/api/v1/health

@@ -1,0 +1,43 @@
+name: Deploy backend
+
+# 推送到后端分支且改动了 backend/ 时，自动 SSH 到服务器更新后端容器。
+# 需要在仓库 Settings → Secrets and variables → Actions 配置下列 Secrets：
+#   DEPLOY_SSH_HOST   服务器地址（如 82.158.226.253）
+#   DEPLOY_SSH_USER   登录用户（如 root 或专用部署用户）
+#   DEPLOY_SSH_KEY    该用户的 SSH 私钥（PEM，整段）
+#   DEPLOY_SSH_PORT   SSH 端口（可选，默认 22）
+#   DEPLOY_REPO_DIR   服务器上仓库根目录（如 /opt/agentpro）
+on:
+  push:
+    branches:
+      - feature/agentpro-backend
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch: {}
+
+# 串行部署，避免两次推送并发改同一台服务器。
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT }}
+          script_stop: true
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_REPO_DIR }}"
+            git fetch --prune origin
+            git checkout feature/agentpro-backend
+            git reset --hard origin/feature/agentpro-backend
+            bash backend/scripts/deploy-remote.sh
