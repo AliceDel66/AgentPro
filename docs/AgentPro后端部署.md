@@ -128,10 +128,15 @@ COPYFILE_DISABLE=1 tar --no-xattrs \
 ## 自动部署（push 即更新）
 推送到 `feature/agentpro-backend` 且改动 `backend/**` 时，GitHub Actions 自动 SSH 到服务器
 更新后端容器。链路：`.github/workflows/deploy-backend.yml` → 服务器 `git reset --hard` →
-`backend/scripts/deploy-remote.sh`（构建 → `alembic upgrade head` → `up -d` → 健康检查）。
+`backend/scripts/deploy-remote.sh`（构建 → `alembic upgrade head` → `up -d` → 健康检查 → **失败自动回滚**）。
 
-关键不变量：部署脚本只构建/迁移/重启，**绝不执行 `git clean`**，以保留未跟踪的
-`backend/.env`（生产配置不在 Git 中）。迁移在「构建后、启动前」执行，失败即中止、旧容器继续服务。
+关键不变量：
+- 部署脚本只构建/迁移/重启，**绝不执行 `git clean`**，以保留未跟踪的 `backend/.env`（生产配置不在 Git 中）。
+- 迁移在「构建后、启动前」执行，失败即中止、旧容器继续服务。
+- 部署前把「当前在跑镜像」打成 `agentpro-api:rollback` 固定为回滚点（也使其脱离 dangling，`image prune` 不会清掉）。
+- **新容器健康检查失败 → 自动把镜像名指回旧镜像并重建，prod 恢复上一版本**；脚本以非零退出让 Action 判失败。
+- 自动回滚只回退「镜像（代码）」，不回退「数据库 schema」。本项目迁移均为增量、旧代码可在新 schema 上运行；
+  若某次部署含破坏性迁移（删列/改名），回滚后需人工 `alembic downgrade`。
 
 ### 一次性配置（仓库 Secrets）
 仓库 → Settings → Secrets and variables → Actions 新增：
@@ -150,9 +155,11 @@ COPYFILE_DISABLE=1 tar --no-xattrs \
 2. 已装 `git` / `docker` / `docker compose` / `curl`，且部署用户在 docker 组内。
 3. `backend/.env` 已存在（生产配置）——脚本检测不到会直接中止。
 
-### 手动触发 / 手动部署
+### 手动触发 / 手动部署 / 回滚
 - 手动触发：仓库 Actions 页选择「Deploy backend」→ Run workflow。
-- 服务器手动：`cd /opt/agentpro && git pull && bash backend/scripts/deploy-remote.sh`。
+- 服务器手动部署：`cd /opt/agentpro && git pull && bash backend/scripts/deploy-remote.sh`。
+- 服务器手动回滚：`cd /opt/agentpro/backend && bash scripts/deploy-remote.sh rollback`
+  （把 `agentpro-api:rollback` 重新挂回并重建；用于部署成功一段时间后才暴露的问题）。
 
 ## 验收
 ```bash

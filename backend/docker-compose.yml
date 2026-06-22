@@ -2,6 +2,8 @@ services:
   api:
     build:
       context: .
+    # 固定镜像名，部署脚本据此打回滚 tag（agentpro-api:rollback）并在健康检查失败时回退。
+    image: agentpro-api:current
     env_file:
       - .env
     environment:
