@@ -144,7 +144,7 @@ COPYFILE_DISABLE=1 tar --no-xattrs \
 | Secret | 值 | 说明 |
 | --- | --- | --- |
 | `DEPLOY_SSH_HOST` | `82.158.226.253` | 服务器地址 |
-| `DEPLOY_SSH_USER` | 如 `root` | 登录用户 |
+| `DEPLOY_SSH_USER` | `agentpro-deploy` | 专用部署用户，不使用 root 跑自动部署 |
 | `DEPLOY_SSH_KEY` | SSH 私钥（PEM 整段） | 对应公钥需在服务器 `~/.ssh/authorized_keys` |
 | `DEPLOY_SSH_PORT` | `22` | 可选，默认 22 |
 | `DEPLOY_REPO_DIR` | `/opt/agentpro` | 服务器仓库根目录 |
@@ -152,8 +152,15 @@ COPYFILE_DISABLE=1 tar --no-xattrs \
 ### 一次性服务器前置
 1. `/opt/agentpro` 是 Git 克隆且 `origin` 指向 `git@github.com:AliceDel66/AgentPro.git`，
    并已配置好对 GitHub 的拉取权限（私有仓库需部署密钥/凭据），`git fetch` 可用。
-2. 已装 `git` / `docker` / `docker compose` / `curl`，且部署用户在 docker 组内。
+2. 已装 `git` / `docker` / `docker compose` / `curl`，且部署用户 `agentpro-deploy` 在 docker 组内。
 3. `backend/.env` 已存在（生产配置）——脚本检测不到会直接中止。
+4. `/opt/agentpro`、`/opt/agentpro/backend` 和 `backend/.env` 对 `agentpro-deploy` 可读写；`.env` 保持 `600` 权限。
+
+### SSH 安全边界
+- GitHub Actions 使用专用 SSH key 登录 `agentpro-deploy`，不使用 root 执行自动部署。
+- 服务器保留 root 密码登录，便于紧急人工运维；不要把 root 密码写入 GitHub Secrets 或脚本。
+- 服务器访问 GitHub 私有仓库使用独立 deploy key，仅用于 `git fetch/pull`。
+- 后端容器端口只绑定 `127.0.0.1:8000`，公网访问统一经过 Nginx HTTPS 入口。
 
 ### 手动触发 / 手动部署 / 回滚
 - 手动触发：仓库 Actions 页选择「Deploy backend」→ Run workflow。
@@ -163,7 +170,8 @@ COPYFILE_DISABLE=1 tar --no-xattrs \
 
 ## 验收
 ```bash
-curl http://<SERVER_IP>:8000/api/v1/health
+curl http://127.0.0.1:8000/api/v1/health
+curl https://api.zgonline.top/agentpro/api/v1/health
 ```
 
 期望返回：

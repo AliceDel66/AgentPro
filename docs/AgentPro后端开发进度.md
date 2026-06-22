@@ -876,3 +876,25 @@
 - Commit：
   - 哈希：本提交
   - 信息：允许桌面端连接远程后端并记录打包验收
+
+### 34. 后端自动部署安全收紧
+- 状态：已完成
+- 完成功能：
+  - 新增服务器专用部署用户 `agentpro-deploy`，GitHub Actions 自动部署不再使用 root
+  - `agentpro-deploy` 已加入 docker 组，可执行 `docker compose` 部署命令
+  - `/opt/agentpro` 已恢复为 Git 仓库并保留服务器私有 `backend/.env`
+  - GitHub Actions `DEPLOY_SSH_USER` 已切换为 `agentpro-deploy`
+  - 后端 `api` 容器端口从公网 `0.0.0.0:8000` 改为仅绑定 `127.0.0.1:8000`
+  - 保留 root 密码登录，作为人工紧急运维入口，不写入 GitHub Secrets 或脚本
+- 相关文件：
+  - backend/docker-compose.yml
+  - docs/AgentPro后端部署.md
+  - docs/AgentPro后端开发进度.md
+- 验证结果：
+  - 已验证 `agentpro-deploy` 可通过 Actions 专用 SSH key 登录服务器
+  - 已验证 `agentpro-deploy` 可执行 `git fetch origin feature/agentpro-backend`
+  - 已验证 `agentpro-deploy` 可执行 `docker compose ps`
+  - 待 push 后由 GitHub Actions 自动部署并验证公网不再暴露 `8000`
+- Commit：
+  - 哈希：本提交
+  - 信息：收紧后端自动部署用户与容器端口暴露
