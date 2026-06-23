@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Circle, FileText, Play, RefreshCcw, ShieldCheck, Sparkles, Square, Terminal } from "lucide-react";
 import { AppButton } from "../common/Button";
 import { StatusChip } from "../common/StatusChip";
@@ -40,10 +40,11 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
   const [loadingSpec, setLoadingSpec] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const busy = action !== null;
+  const pendingQuestions = detail?.followupQuestions.length ?? 0;
 
   useEffect(() => {
     let cancelled = false;
-    if (!requirementId) {
+    if (!requirementId || pendingQuestions > 0) {
       setSpec(null);
       setJob(null);
       setEvents([]);
@@ -78,7 +79,7 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
     };
     // Keep this tied to requirement changes only; spec mutations update local state directly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requirementId, setActiveSpecId]);
+  }, [pendingQuestions, requirementId, setActiveSpecId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +122,7 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
   useEffect(() => {
     let cancelled = false;
     async function loadReview() {
-      if (!activeReviewId && !activeJobId && !activeSpecId) {
+      if (!activeReviewId && (!activeJobId || !job || !TERMINAL_JOB_STATUSES.has(displayJobStatus(job.status, events)))) {
         setReview(null);
         return;
       }
@@ -145,14 +146,15 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeJobId, activeReviewId, activeSpecId, setActiveReviewId]);
+  }, [activeJobId, activeReviewId, activeSpecId, events, job, setActiveReviewId]);
 
-  const pendingQuestions = detail?.followupQuestions.length ?? 0;
-  const confirmedCount = useMemo(() => (detail?.decisions ?? []).filter((item) => item.confirmed).length, [detail]);
   const progress = Math.max(clampProgress(job?.progress), latestEventProgress(events));
   const status = displayJobStatus(job?.status, events);
+  const specApproved = spec?.status === "approved";
+  const canStart = Boolean(specApproved && spec?.id && requirementId);
+  const jobTerminal = Boolean(job && TERMINAL_JOB_STATUSES.has(status));
   const canCancel = Boolean(job && !TERMINAL_JOB_STATUSES.has(status));
-  const canCreateReview = Boolean(activeSpecId || (activeJobId && TERMINAL_JOB_STATUSES.has(status)));
+  const canCreateReview = Boolean(activeJobId && jobTerminal);
 
   const handleGenerateSpec = async (regenerate: boolean) => {
     if (!requirementId || busy) return;
@@ -177,10 +179,11 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
     setErrorMessage(null);
     try {
       const result = await approveAgentSpec(requirementId);
-      if (result.data.spec) {
-        cachedInlineSpecs.set(requirementId, result.data.spec);
-        setSpec(result.data.spec);
-        setActiveSpecId(result.data.spec.id);
+      const approvedSpec = result.data.spec ?? (spec ? { ...spec, status: "approved" } : null);
+      if (approvedSpec) {
+        cachedInlineSpecs.set(requirementId, approvedSpec);
+        setSpec(approvedSpec);
+        setActiveSpecId(approvedSpec.id);
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "审批 AgentSpec 失败");
@@ -190,13 +193,13 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
   };
 
   const handleStart = async () => {
-    if ((!activeSpecId && !requirementId) || busy) return;
+    if (!canStart || !spec?.id || busy) return;
     setAction("start");
     setErrorMessage(null);
     try {
       const result = await startRunnerJob({
         strategy,
-        specId: activeSpecId ?? undefined,
+        specId: spec.id,
         requirementId: requirementId ?? undefined
       });
       setJob(result.data);
@@ -207,7 +210,7 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
         onStatus: setActiveJobStatus
       })
         .then(async () => {
-          const latest = await getLatestReview({ jobId: result.data.id, specId: activeSpecId ?? undefined });
+          const latest = await getLatestReview({ jobId: result.data.id, specId: spec.id });
           if (latest.data) {
             setReview(latest.data);
             setActiveReviewId(latest.data.id);
@@ -247,7 +250,7 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
     try {
       const result = await createReviewReport({
         jobId: activeJobId ?? undefined,
-        specId: activeSpecId ?? undefined
+        specId: spec?.id ?? activeSpecId ?? undefined
       });
       setReview(result.data);
       setActiveReviewId(result.data.id);
@@ -258,35 +261,30 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
     }
   };
 
+  const errorStep = errorMessage ? (
+    <WorkflowStepMessage icon={<Sparkles size={17} />} title="这一步暂时失败">
+      <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div>
+    </WorkflowStepMessage>
+  ) : null;
+
+  if (pendingQuestions > 0) {
+    return (
+      <>
+        {errorStep}
+        <WorkflowStepMessage icon={<Sparkles size={17} />} title="先确认需求关键信息" description="你回答完上面的反问后，我再进入 AgentSpec、开发和评审 workflow。">
+          <div className="rounded-lg bg-agent-bg px-3 py-2 text-xs leading-6 text-agent-muted">
+            还有 {pendingQuestions} 个问题待确认。当前不会提前展示后续开发步骤，避免用户误以为可以跳过需求确认。
+          </div>
+        </WorkflowStepMessage>
+      </>
+    );
+  }
+
   return (
     <>
-      {errorMessage ? (
-        <WorkflowStepMessage icon={<Sparkles size={17} />} title="这一步暂时失败">
-          <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div>
-        </WorkflowStepMessage>
-      ) : null}
+      {errorStep}
 
-      <WorkflowStepMessage icon={<Sparkles size={17} />} title="第 1 步：确认需求状态" description="我先判断这条需求是否已经足够进入制作。">
-        {detail ? (
-          <>
-            <div className="mb-2 flex items-baseline justify-between">
-              <span className="text-[30px] font-bold text-agent-primary">{detail.maturity}%</span>
-              <StatusChip tone={pendingQuestions ? "orange" : "cyan"}>{pendingQuestions ? "待确认" : "可推进"}</StatusChip>
-            </div>
-            <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-agent-divider">
-              <div className="h-full rounded-full bg-gradient-to-r from-agent-primary to-agent-cyan" style={{ width: `${detail.maturity}%` }} />
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <Metric label="已确认" value={confirmedCount} />
-              <Metric label="待反问" value={pendingQuestions} />
-            </div>
-          </>
-        ) : (
-          <div className="text-xs leading-6 text-agent-muted">创建或选择需求后，这里会显示完整工作流。</div>
-        )}
-      </WorkflowStepMessage>
-
-      <WorkflowStepMessage icon={<FileText size={17} />} title="第 2 步：生成 AgentSpec 草案" description="需求可以推进后，我会把对话整理成可执行的 AgentSpec。">
+      <WorkflowStepMessage icon={<FileText size={17} />} title="第 1 步：生成并确认 AgentSpec" description="我先把已确认的需求整理成可执行草案。你确认草案后，才会进入开发方式选择。">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="min-w-0 text-xs leading-6 text-agent-muted">
             {loadingSpec ? "正在读取草案..." : spec ? `v${spec.version} · ${spec.title}` : "尚未生成 AgentSpec"}
@@ -294,46 +292,57 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
           {spec ? <StatusChip tone={spec.status === "approved" ? "green" : "blue"}>{spec.status === "approved" ? "已审批" : "草案"}</StatusChip> : null}
         </div>
         {spec ? <div className="mb-3 line-clamp-3 text-xs leading-6 text-agent-secondary">{String(spec.body.objective ?? "草案已生成，可继续审批或重新生成。")}</div> : null}
-        <div className="flex flex-wrap gap-2">
-          <AppButton className="px-3 py-2" disabled={!requirementId || busy} loading={action === "spec"} type="button" variant={spec ? "ghost" : "secondary"} onClick={() => void handleGenerateSpec(Boolean(spec))}>
-            <RefreshCcw size={14} />
-            {spec ? "重新生成" : "生成草案"}
-          </AppButton>
-          <AppButton className="px-3 py-2" disabled={!spec || spec.status === "approved" || busy} loading={action === "approve"} type="button" onClick={() => void handleApprove()}>
-            <CheckCircle2 size={14} />
-            确认
-          </AppButton>
-        </div>
+        {specApproved ? (
+          <div className="rounded-lg bg-agent-bg px-3 py-2 text-xs leading-6 text-agent-muted">AgentSpec 已确认，下面进入开发方式选择。</div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <AppButton className="px-3 py-2" disabled={!requirementId || busy} loading={action === "spec"} type="button" variant={spec ? "ghost" : "secondary"} onClick={() => void handleGenerateSpec(Boolean(spec))}>
+              <RefreshCcw size={14} />
+              {spec ? "重新生成" : "生成草案"}
+            </AppButton>
+            {spec ? (
+              <AppButton className="px-3 py-2" disabled={busy} loading={action === "approve"} type="button" onClick={() => void handleApprove()}>
+                <CheckCircle2 size={14} />
+                确认
+              </AppButton>
+            ) : null}
+          </div>
+        )}
       </WorkflowStepMessage>
 
-      <WorkflowStepMessage icon={<Terminal size={17} />} title="第 3 步：选择开发方式" description="确认草案后，直接在这一条消息里选择由哪个 Runner 执行。">
-        <div className="mb-3 grid grid-cols-3 gap-2">
-          {strategies.map((item) => {
-            const active = strategy === item.value;
-            return (
-              <button
-                className={`rounded-lg border px-2 py-2 text-left transition-colors ${active ? "border-agent-primary bg-agent-pale" : "border-agent-border hover:border-agent-primary"}`}
-                key={item.value}
-                type="button"
-                onClick={() => setStrategy(item.value)}
-              >
-                <div className={`text-xs font-semibold ${active ? "text-agent-primary" : "text-agent-ink"}`}>{item.label}</div>
-                <div className="mt-0.5 text-[10px] text-agent-muted">{item.desc}</div>
-              </button>
-            );
-          })}
-        </div>
-        <div className="mb-3 flex items-center justify-between text-xs text-agent-muted">
-          <span>Spec：{activeSpecId ? "已绑定" : "可用需求直接启动"}</span>
-          {job ? <StatusChip tone={statusTone(status)}>{statusLabel(status)}</StatusChip> : null}
-        </div>
-        <AppButton className="w-full py-2.5" disabled={(!activeSpecId && !requirementId) || busy} loading={action === "start"} type="button" onClick={() => void handleStart()}>
-          <Play size={14} />
-          {job ? "启动新一轮开发" : "开始真实开发"}
-        </AppButton>
-      </WorkflowStepMessage>
+      {specApproved ? <WorkflowStepMessage icon={<Terminal size={17} />} title="第 2 步：选择开发方式" description="AgentSpec 已确认。选择 Runner 后启动开发，启动后才会进入运行监控。">
+        {job ? (
+          <div className="rounded-lg bg-agent-bg px-3 py-2 text-xs leading-6 text-agent-muted">
+            开发任务已启动，状态为 <span className="font-semibold text-agent-primary">{statusLabel(status)}</span>，下面进入运行监控。
+          </div>
+        ) : (
+          <>
+            <div className="mb-3 grid grid-cols-3 gap-2">
+              {strategies.map((item) => {
+                const active = strategy === item.value;
+                return (
+                  <button
+                    className={`rounded-lg border px-2 py-2 text-left transition-colors ${active ? "border-agent-primary bg-agent-pale" : "border-agent-border hover:border-agent-primary"}`}
+                    key={item.value}
+                    type="button"
+                    onClick={() => setStrategy(item.value)}
+                  >
+                    <div className={`text-xs font-semibold ${active ? "text-agent-primary" : "text-agent-ink"}`}>{item.label}</div>
+                    <div className="mt-0.5 text-[10px] text-agent-muted">{item.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mb-3 text-xs text-agent-muted">Spec：已确认</div>
+            <AppButton className="w-full py-2.5" disabled={!canStart || busy} loading={action === "start"} type="button" onClick={() => void handleStart()}>
+              <Play size={14} />
+              开始真实开发
+            </AppButton>
+          </>
+        )}
+      </WorkflowStepMessage> : null}
 
-      <WorkflowStepMessage icon={<Circle size={17} />} title="第 4 步：查看运行进度" description="启动后，我会把 Runner 状态和事件继续贴在这一轮对话里。">
+      {job ? <WorkflowStepMessage icon={<Circle size={17} />} title="第 3 步：查看运行进度" description="开发启动后，我会持续显示 Runner 状态和最近事件。任务完成后才会进入自动评审。">
         {job ? (
           <>
             <div className="mb-2 flex items-center justify-between">
@@ -353,17 +362,15 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
                 <Square size={13} />
                 取消
               </AppButton>
-              <AppButton className="flex-1 px-3 py-2" disabled={!canCreateReview || busy} loading={action === "review"} type="button" onClick={() => void handleCreateReview()}>
-                评审
-              </AppButton>
+              {jobTerminal ? <StatusChip tone="green">可评审</StatusChip> : <StatusChip tone="cyan">运行中</StatusChip>}
             </div>
           </>
         ) : (
           <div className="text-xs leading-6 text-agent-muted">启动开发任务后，这一步会显示 Runner 状态、进度和最近事件。</div>
         )}
-      </WorkflowStepMessage>
+      </WorkflowStepMessage> : null}
 
-      <WorkflowStepMessage icon={<ShieldCheck size={17} />} title="第 5 步：生成自动评审" description="开发完成后，我会把评审结果继续作为对话里的下一步。">
+      {jobTerminal ? <WorkflowStepMessage icon={<ShieldCheck size={17} />} title="第 4 步：生成自动评审" description="开发任务结束后，点击生成评审报告；生成后才会展示评审结论。">
         {review ? (
           <>
             <div className="mb-2 flex items-center justify-between">
@@ -380,7 +387,7 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
             </AppButton>
           </>
         )}
-      </WorkflowStepMessage>
+      </WorkflowStepMessage> : null}
     </>
   );
 }
@@ -396,15 +403,6 @@ function WorkflowStepMessage({ icon, title, description, children }: { icon: Rea
         {description ? <div className="mb-4 text-xs leading-6 text-agent-muted">{description}</div> : null}
         {children}
       </div>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg bg-[#F8FAFC] px-3 py-2">
-      <div className="text-[17px] font-bold text-agent-ink">{value}</div>
-      <div className="text-[11px] text-agent-muted">{label}</div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { TypingIndicator } from "../../components/common/TypingIndicator";
 import { TypewriterText } from "../../components/common/Typewriter";
 import { FollowupQuestionCard } from "../../components/workflow/FollowupQuestionCard";
 import { InlineWorkflowPanel } from "../../components/workflow/InlineWorkflowPanel";
+import { StatusChip } from "../../components/common/StatusChip";
 import { confirmRequirementFollowups, getRequirementDetail, streamRequirementDraft, streamRequirementMessage } from "../../services/agentSpecService";
 import type { RequirementDetail } from "../../services/types";
 import type { Navigate } from "../../types";
@@ -96,6 +97,8 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     scrollToBottom();
   }, [detail?.messages.length, sending, scrollToBottom, streamingText]);
 
+  const confirmedCount = (detail?.decisions ?? []).filter((item) => item.confirmed).length;
+
   const handleSend = async () => {
     const content = draft.trim();
     if (!content || sending) return;
@@ -162,6 +165,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
       <RequirementSidebar activeRequirementId={activeRequirementId} navigate={navigate} setActiveRequirementId={setActiveRequirementId} />
 
       <section className="flex min-w-0 flex-1 flex-col bg-agent-bg">
+        {detail ? <RequirementStatusTop detail={detail} confirmedCount={confirmedCount} pendingQuestions={pendingQuestions.length} /> : null}
         <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-4 pt-7">
           <div className="mx-auto max-w-[760px]">
             {loading && !detail ? <LoadingState label="正在读取需求..." /> : null}
@@ -273,6 +277,41 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function RequirementStatusTop({ detail, confirmedCount, pendingQuestions }: { detail: RequirementDetail; confirmedCount: number; pendingQuestions: number }) {
+  const ready = pendingQuestions === 0;
+  return (
+    <div className="border-b border-agent-divider bg-white px-7 py-3">
+      <div className="mx-auto flex max-w-[760px] items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="truncate text-sm font-semibold text-agent-ink">{detail.title}</div>
+            <StatusChip tone={ready ? "cyan" : "orange"}>{ready ? "可进入 workflow" : "待确认"}</StatusChip>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-agent-divider">
+              <div className="h-full rounded-full bg-gradient-to-r from-agent-primary to-agent-cyan" style={{ width: `${Math.max(0, Math.min(100, detail.maturity))}%` }} />
+            </div>
+            <span className="w-12 text-right text-sm font-bold text-agent-primary">{detail.maturity}%</span>
+          </div>
+        </div>
+        <div className="hidden grid-cols-2 gap-2 text-xs sm:grid">
+          <StatusMetric label="已确认" value={confirmedCount} />
+          <StatusMetric label="待反问" value={pendingQuestions} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-[72px] rounded-lg bg-agent-bg px-3 py-2">
+      <div className="text-[15px] font-bold text-agent-ink">{value}</div>
+      <div className="text-[11px] text-agent-muted">{label}</div>
     </div>
   );
 }
