@@ -280,21 +280,18 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
     );
   }
 
-  return (
-    <>
-      {errorStep}
-
-      <WorkflowStepMessage icon={<FileText size={17} />} title="第 1 步：生成并确认 AgentSpec" description="我先把已确认的需求整理成可执行草案。你确认草案后，才会进入开发方式选择。">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="min-w-0 text-xs leading-6 text-agent-muted">
-            {loadingSpec ? "正在读取草案..." : spec ? `v${spec.version} · ${spec.title}` : "尚未生成 AgentSpec"}
+  if (!specApproved) {
+    return (
+      <>
+        {errorStep}
+        <WorkflowStepMessage icon={<FileText size={17} />} title="第 1 步：生成并确认 AgentSpec" description="我先把已确认的需求整理成可执行草案。你确认草案后，才会进入开发方式选择。">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0 text-xs leading-6 text-agent-muted">
+              {loadingSpec ? "正在读取草案..." : spec ? `v${spec.version} · ${spec.title}` : "尚未生成 AgentSpec"}
+            </div>
+            {spec ? <StatusChip tone="blue">草案</StatusChip> : null}
           </div>
-          {spec ? <StatusChip tone={spec.status === "approved" ? "green" : "blue"}>{spec.status === "approved" ? "已审批" : "草案"}</StatusChip> : null}
-        </div>
-        {spec ? <div className="mb-3 line-clamp-3 text-xs leading-6 text-agent-secondary">{String(spec.body.objective ?? "草案已生成，可继续审批或重新生成。")}</div> : null}
-        {specApproved ? (
-          <div className="rounded-lg bg-agent-bg px-3 py-2 text-xs leading-6 text-agent-muted">AgentSpec 已确认，下面进入开发方式选择。</div>
-        ) : (
+          {spec ? <div className="mb-3 line-clamp-3 text-xs leading-6 text-agent-secondary">{String(spec.body.objective ?? "草案已生成，可继续审批或重新生成。")}</div> : null}
           <div className="flex flex-wrap gap-2">
             <AppButton className="px-3 py-2" disabled={!requirementId || busy} loading={action === "spec"} type="button" variant={spec ? "ghost" : "secondary"} onClick={() => void handleGenerateSpec(Boolean(spec))}>
               <RefreshCcw size={14} />
@@ -307,87 +304,97 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
               </AppButton>
             ) : null}
           </div>
-        )}
-      </WorkflowStepMessage>
+        </WorkflowStepMessage>
+      </>
+    );
+  }
 
-      {specApproved ? <WorkflowStepMessage icon={<Terminal size={17} />} title="第 2 步：选择开发方式" description="AgentSpec 已确认。选择 Runner 后启动开发，启动后才会进入运行监控。">
-        {job ? (
-          <div className="rounded-lg bg-agent-bg px-3 py-2 text-xs leading-6 text-agent-muted">
-            开发任务已启动，状态为 <span className="font-semibold text-agent-primary">{statusLabel(status)}</span>，下面进入运行监控。
+  if (!job) {
+    return (
+      <>
+        {errorStep}
+        <WorkflowStepMessage icon={<Terminal size={17} />} title="第 2 步：选择开发方式" description="AgentSpec 已确认。选择 Runner 后启动开发，启动后才会进入运行监控。">
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            {strategies.map((item) => {
+              const active = strategy === item.value;
+              return (
+                <button
+                  className={`rounded-lg border px-2 py-2 text-left transition-colors ${active ? "border-agent-primary bg-agent-pale" : "border-agent-border hover:border-agent-primary"}`}
+                  key={item.value}
+                  type="button"
+                  onClick={() => setStrategy(item.value)}
+                >
+                  <div className={`text-xs font-semibold ${active ? "text-agent-primary" : "text-agent-ink"}`}>{item.label}</div>
+                  <div className="mt-0.5 text-[10px] text-agent-muted">{item.desc}</div>
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <>
-            <div className="mb-3 grid grid-cols-3 gap-2">
-              {strategies.map((item) => {
-                const active = strategy === item.value;
-                return (
-                  <button
-                    className={`rounded-lg border px-2 py-2 text-left transition-colors ${active ? "border-agent-primary bg-agent-pale" : "border-agent-border hover:border-agent-primary"}`}
-                    key={item.value}
-                    type="button"
-                    onClick={() => setStrategy(item.value)}
-                  >
-                    <div className={`text-xs font-semibold ${active ? "text-agent-primary" : "text-agent-ink"}`}>{item.label}</div>
-                    <div className="mt-0.5 text-[10px] text-agent-muted">{item.desc}</div>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mb-3 text-xs text-agent-muted">Spec：已确认</div>
-            <AppButton className="w-full py-2.5" disabled={!canStart || busy} loading={action === "start"} type="button" onClick={() => void handleStart()}>
-              <Play size={14} />
-              开始真实开发
-            </AppButton>
-          </>
-        )}
-      </WorkflowStepMessage> : null}
+          <div className="mb-3 text-xs text-agent-muted">Spec：已确认</div>
+          <AppButton className="w-full py-2.5" disabled={!canStart || busy} loading={action === "start"} type="button" onClick={() => void handleStart()}>
+            <Play size={14} />
+            开始真实开发
+          </AppButton>
+        </WorkflowStepMessage>
+      </>
+    );
+  }
 
-      {job ? <WorkflowStepMessage icon={<Circle size={17} />} title="第 3 步：查看运行进度" description="开发启动后，我会持续显示 Runner 状态和最近事件。任务完成后才会进入自动评审。">
-        {job ? (
-          <>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="truncate font-mono text-[11px] text-agent-muted" title={job.id}>
-                {job.id}
-              </span>
-              <span className="text-xs font-semibold text-agent-primary">{progress}%</span>
-            </div>
-            <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-agent-divider">
-              <div className="h-full rounded-full bg-agent-primary" style={{ width: `${progress}%` }} />
-            </div>
-            <div className="mb-3 rounded-lg bg-agent-ink px-3 py-2 font-mono text-[11px] leading-6 text-[#A0AEC0]">
-              {events.length ? events.slice(-3).map((event) => <div key={event.id}>[{event.phase || event.level}] {event.message}</div>) : <div>status={status} engines={(job.engines ?? []).join(", ") || "-"}</div>}
-            </div>
-            <div className="flex gap-2">
-              <AppButton className="flex-1 px-3 py-2" disabled={!canCancel || busy} loading={action === "cancel"} type="button" variant="secondary" onClick={() => void handleCancel()}>
-                <Square size={13} />
-                取消
-              </AppButton>
-              {jobTerminal ? <StatusChip tone="green">可评审</StatusChip> : <StatusChip tone="cyan">运行中</StatusChip>}
-            </div>
-          </>
-        ) : (
-          <div className="text-xs leading-6 text-agent-muted">启动开发任务后，这一步会显示 Runner 状态、进度和最近事件。</div>
-        )}
-      </WorkflowStepMessage> : null}
-
-      {jobTerminal ? <WorkflowStepMessage icon={<ShieldCheck size={17} />} title="第 4 步：生成自动评审" description="开发任务结束后，点击生成评审报告；生成后才会展示评审结论。">
-        {review ? (
-          <>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs text-agent-muted">推荐：{engineLabel(review.recommendedEngine)}</span>
-              <span className="text-[24px] font-bold text-agent-primary">{review.score}</span>
-            </div>
-            <div className="line-clamp-4 text-xs leading-6 text-agent-secondary">{review.summary ?? "评审报告已生成。"}</div>
-          </>
-        ) : (
-          <>
-            <div className="mb-3 text-xs leading-6 text-agent-muted">开发完成后可直接在这里生成评审报告，不需要切到报告页。</div>
-            <AppButton className="w-full py-2.5" disabled={!canCreateReview || busy} loading={action === "review"} type="button" variant="secondary" onClick={() => void handleCreateReview()}>
-              生成评审报告
+  if (!jobTerminal) {
+    return (
+      <>
+        {errorStep}
+        <WorkflowStepMessage icon={<Circle size={17} />} title="第 3 步：查看运行进度" description="开发启动后，我会持续显示 Runner 状态和最近事件。任务完成后才会进入自动评审。">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="truncate font-mono text-[11px] text-agent-muted" title={job.id}>
+              {job.id}
+            </span>
+            <span className="text-xs font-semibold text-agent-primary">{progress}%</span>
+          </div>
+          <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-agent-divider">
+            <div className="h-full rounded-full bg-agent-primary" style={{ width: `${progress}%` }} />
+          </div>
+          <div className="mb-3 rounded-lg bg-agent-ink px-3 py-2 font-mono text-[11px] leading-6 text-[#A0AEC0]">
+            {events.length ? events.slice(-3).map((event) => <div key={event.id}>[{event.phase || event.level}] {event.message}</div>) : <div>status={status} engines={(job.engines ?? []).join(", ") || "-"}</div>}
+          </div>
+          <div className="flex gap-2">
+            <AppButton className="flex-1 px-3 py-2" disabled={!canCancel || busy} loading={action === "cancel"} type="button" variant="secondary" onClick={() => void handleCancel()}>
+              <Square size={13} />
+              取消
             </AppButton>
-          </>
-        )}
-      </WorkflowStepMessage> : null}
+            <StatusChip tone="cyan">运行中</StatusChip>
+          </div>
+        </WorkflowStepMessage>
+      </>
+    );
+  }
+
+  if (!review) {
+    return (
+      <>
+        {errorStep}
+        <WorkflowStepMessage icon={<ShieldCheck size={17} />} title="第 4 步：生成自动评审" description="开发任务结束后，点击生成评审报告；生成后才会展示评审结论。">
+          <div className="mb-3 rounded-lg bg-agent-bg px-3 py-2 text-xs leading-6 text-agent-muted">
+            开发任务已结束，状态为 <span className="font-semibold text-agent-primary">{statusLabel(status)}</span>。
+          </div>
+          <AppButton className="w-full py-2.5" disabled={!canCreateReview || busy} loading={action === "review"} type="button" variant="secondary" onClick={() => void handleCreateReview()}>
+            生成评审报告
+          </AppButton>
+        </WorkflowStepMessage>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {errorStep}
+      <WorkflowStepMessage icon={<ShieldCheck size={17} />} title="第 5 步：查看评审结果" description="评审已生成，当前 workflow 已完成。">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs text-agent-muted">推荐：{engineLabel(review.recommendedEngine)}</span>
+          <span className="text-[24px] font-bold text-agent-primary">{review.score}</span>
+        </div>
+        <div className="line-clamp-4 text-xs leading-6 text-agent-secondary">{review.summary ?? "评审报告已生成。"}</div>
+      </WorkflowStepMessage>
     </>
   );
 }

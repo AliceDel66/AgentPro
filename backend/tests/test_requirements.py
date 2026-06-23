@@ -1,7 +1,6 @@
 import json
 from importlib import import_module
 
-import httpx
 import pytest
 from httpx import AsyncClient
 
@@ -499,7 +498,7 @@ async def test_requirement_chat_falls_back_when_ai_fails(
     assert "订单" in created["messages"][-1]["content"]
 
 
-async def test_followup_confirm_falls_back_when_ai_times_out(
+async def test_followup_confirm_returns_without_waiting_for_ai_graph(
     api_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -517,27 +516,11 @@ async def test_followup_confirm_falls_back_when_ai_times_out(
     requirement_id = created["id"]
     question_key = created["followupQuestions"][0]["key"]
 
-    await api_client.put(
-        "/api/v1/model/config",
-        headers=headers,
-        json={
-            "provider": "sub2api",
-            "baseUrl": "https://slow.example.com/v1",
-            "model": "slow-model",
-            "apiKey": "slow-secret",
-        },
-    )
+    async def fail_if_ai_graph_runs(*args, **kwargs):
+        raise AssertionError("followup confirmation must not wait for the AI graph")
 
-    async def timeout_chat_completion(
-        base_url: str,
-        api_key: str | None,
-        model: str,
-        messages: list[dict[str, str]],
-    ) -> str:
-        raise httpx.ReadTimeout("model provider timeout")
-
-    ai_module = import_module("app.modules.requirements.ai_service")
-    monkeypatch.setattr(ai_module, "call_openai_chat_completion", timeout_chat_completion)
+    router_module = import_module("app.modules.requirements.router")
+    monkeypatch.setattr(router_module, "run_ai_requirement_graph", fail_if_ai_graph_runs)
 
     confirm_response = await api_client.post(
         f"/api/v1/requirements/{requirement_id}/followups/confirm",

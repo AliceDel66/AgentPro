@@ -29,6 +29,7 @@ from app.modules.requirements.ai_service import (
 )
 from app.modules.requirements.graph import (
     RequirementGraphState,
+    confirmed_decision_keys,
     filter_confirmed_followups,
     run_requirement_graph,
 )
@@ -107,6 +108,82 @@ def followup_confirmation_message(decisions: list[dict[str, Any]]) -> str:
     for item in decisions:
         lines.append(f"- {item['key']}：{format_decision_value(item.get('value'))}")
     return "\n".join(lines)
+
+
+def merge_confirmed_decisions(
+    current_decisions: list[dict[str, Any]],
+    confirmed_decisions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for item in confirmed_decisions:
+        key = str(item.get("key") or "").strip()
+        if key:
+            merged[key] = {
+                "key": key,
+                "value": item.get("value"),
+                "confirmed": bool(item.get("confirmed", False)),
+            }
+
+    for item in current_decisions:
+        key = str(item.get("key") or "").strip()
+        if key and key not in merged:
+            merged[key] = {
+                "key": key,
+                "value": item.get("value"),
+                "confirmed": bool(item.get("confirmed", False)),
+            }
+    return list(merged.values())
+
+
+def assistant_confirmation_text(followups: list[dict[str, Any]]) -> str:
+    if not followups:
+        return "已记录你的确认，当前需求关键信息已经比较完整，可以生成 AgentSpec 草案。"
+
+    lines = ["已记录你的回答。还需要确认："]
+    lines.extend(
+        f"{index}. {item['question']}" for index, item in enumerate(followups, start=1)
+    )
+    return "\n".join(lines)
+
+
+def fast_followup_confirmation_state(
+    previous_state: RequirementGraphState,
+    messages: list[dict[str, str]],
+    confirmed_decisions: list[dict[str, Any]],
+) -> RequirementGraphState:
+    decisions = merge_confirmed_decisions(previous_state.get("decisions", []), confirmed_decisions)
+    followups = filter_confirmed_followups(previous_state.get("followupQuestions", []), decisions)
+    remaining_keys = {
+        str(item.get("key") or "").strip()
+        for item in followups
+        if str(item.get("key") or "").strip()
+    }
+    confirmed_keys = confirmed_decision_keys(decisions)
+    gaps = [
+        gap
+        for gap in previous_state.get("gaps", [])
+        if gap not in confirmed_keys and (not remaining_keys or gap in remaining_keys)
+    ]
+    if not followups:
+        gaps = []
+
+    spec_draft = dict(previous_state.get("specDraft", {}))
+    spec_draft["openQuestions"] = followups
+    spec_draft["decisions"] = decisions
+
+    return {
+        **previous_state,
+        "messages": messages,
+        "confirmed_decisions": confirmed_decisions,
+        "assistantMessage": assistant_confirmation_text(followups),
+        "gaps": gaps,
+        "followupQuestions": followups,
+        "decisions": decisions,
+        "specDraft": spec_draft,
+        "approvalStatus": "waiting_user_confirmation",
+        "model": str(previous_state.get("model") or "RequirementGraph"),
+        "aiResponseFormat": previous_state.get("aiResponseFormat", "fast_confirmation"),
+    }
 
 
 async def persist_graph_run(
@@ -684,21 +761,30 @@ async def confirm_followups(
 
     await session.flush()
     confirmed_decisions = await load_decisions(session, requirement.id)
-    graph_state, graph_name = await process_requirement_graph(
-        session,
-        requirement,
-        current_user,
-        confirmed_decisions=confirmed_decisions,
+    messages = [
+        {"role": message.role, "content": message.content}
+        for message in await load_messages(session, requirement.id)
+    ]
+    previous_state = await latest_graph_state(session, requirement)
+    graph_state = fast_followup_confirmation_state(
+        previous_state,
+        messages,
+        confirmed_decisions,
     )
     session.add(
         ConversationMessage(
             requirement_id=requirement.id,
             role="assistant",
             content=assistant_followup_text(graph_state),
-            message_metadata={"graph": graph_name},
+            message_metadata={"graph": "RequirementConfirmationGraph", "fast": True},
         )
     )
-    graph_run = await persist_graph_run(session, requirement, graph_state, graph_name)
+    graph_run = await persist_graph_run(
+        session,
+        requirement,
+        graph_state,
+        "RequirementConfirmationGraph",
+    )
     await session.commit()
     return ok(await build_detail(session, requirement, graph_state, graph_run.id))
 

@@ -14,13 +14,49 @@ AgentPro 是一个面向技术小白的桌面端 Agent 开发助手。它通过�
 - 邮箱验证码注册、账号/邮箱 + 密码登录、JWT access/refresh 会话。
 - OpenAI-compatible 模型配置，支持 `baseUrl + apiKey`，当前按 sub2api 等中转服务设计。
 - 多轮需求访谈、主动反问、反问确认、AgentSpec 草案生成与审批。
-- 严格 workflow：需求访谈 -> 需求草案 -> 开发调度 -> 并行监控 -> 自动评审。
+- 严格对话式 workflow：用户始终停留在需求访谈对话界面，每一步确认后才出现下一步。
 - 需求库作为工作流中心，展示开发状态、开发方式、评审分和下一步操作。
 - 桌面端调用用户本机 Codex / Claude Code CLI，后端只保存任务状态、日志和产物证据。
 - Runner 默认把开发工作区保存到 `~/AgentPro/runs`，也可在设置页自定义 Agent 开发保存目录。
 - 每次真实开发完成后生成 `agentpro-delivery.json` 交付清单，评审页可打开工作区、构建产物、README 并复制预览命令。
 - 自动评审报告包含总览、详细报告、证据链、优化方案和交付建议。
 - 报告档案支持查看历史报告、补全旧报告、重新生成报告和基于报告发起优化。
+
+## 对话式 Workflow 协议
+
+AgentPro 的主路径不是多个独立页面之间跳转，而是一条留在对话界面的线性 workflow。用户提出需求后，顶部只展示当前需求状态、成熟度、已确认数和待确认数；正文继续保持聊天流。系统在当前步骤完成前，不展示或启用后续步骤，避免用户误以为可以跳过确认。
+
+```mermaid
+flowchart TD
+    A[用户在对话框提出 Agent 想法] --> B[创建需求记录并流式追问]
+    B --> C[顶部展示需求状态与成熟度]
+    C --> D{是否仍有待确认问题?}
+    D -- 是 --> E[在聊天流中展示需求确认步骤]
+    E --> F[用户回答或标记不适用]
+    F --> G[提交回答并快速写入确认项]
+    G --> D
+    D -- 否 --> H[展示当前步骤: 生成 AgentSpec 草案]
+    H --> I{用户确认草案?}
+    I -- 否 --> H
+    I -- 是 --> J[展示当前步骤: 选择 Runner 开发方式]
+    J --> K{用户启动真实开发?}
+    K -- 否 --> J
+    K -- 是 --> L[展示当前步骤: Runner 运行监控]
+    L --> M{Runner 是否结束?}
+    M -- 否 --> L
+    M -- 是 --> N[展示当前步骤: 生成自动评审]
+    N --> O{用户生成评审?}
+    O -- 否 --> N
+    O -- 是 --> P[展示评审结论与交付证据]
+```
+
+关键约束：
+
+- 全程以 `chat` 页面为主操作面，`followup/spec/dispatch/monitor/review` 页面仅保留为兼容入口或深链入口。
+- 顶部状态条只展示状态，不承载跳步操作。
+- 需求确认是 workflow 的第 0 步；存在待确认问题时，不展示 AgentSpec、Runner 和评审操作。
+- 后续步骤一次只展示当前可执行步骤：AgentSpec 草案、开发方式、运行监控、自动评审、评审结果。
+- “提交回答”必须先持久化用户确认并快速返回，模型整理不能阻塞确认成功。
 
 ## 技术栈
 
@@ -265,7 +301,7 @@ docker compose up -d
 - 报告档案
 - 设置
 
-桌面端页面应保持 56px 图标侧栏、顶部 workflow 阶段条、HeroUI 风格按钮和整体蓝色系视觉。
+桌面端页面应保持 56px 图标侧栏、需求访谈顶部状态条、对话区内单步 workflow、HeroUI 风格按钮和整体蓝色系视觉。
 
 ## API 概览
 
@@ -280,8 +316,12 @@ docker compose up -d
 - `PUT /api/v1/model/config`
 - `GET /api/v1/model/list`
 - `POST /api/v1/requirements`
+- `POST /api/v1/requirements/stream`
 - `GET /api/v1/requirements`
+- `GET /api/v1/requirements/{id}`
 - `POST /api/v1/requirements/{id}/messages`
+- `POST /api/v1/requirements/{id}/messages/stream`
+- `POST /api/v1/requirements/{id}/followups/confirm`
 - `POST /api/v1/requirements/{id}/spec/generate`
 - `POST /api/v1/requirements/{id}/approve`
 - `POST /api/v1/dev-jobs`
