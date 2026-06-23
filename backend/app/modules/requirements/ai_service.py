@@ -7,6 +7,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.crypto import decrypt_secret
 from app.core.net import assert_safe_outbound_url
 from app.db.models import ModelProviderConfig
@@ -103,7 +104,8 @@ async def call_openai_chat_completion(
 
     chat_url = build_chat_url(base_url)
     assert_safe_outbound_url(chat_url)
-    async with httpx.AsyncClient(timeout=30) as client:
+    timeout_seconds = max(1.0, get_settings().requirement_ai_timeout_seconds)
+    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
         response = await client.post(
             chat_url,
             headers=headers,

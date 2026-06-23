@@ -1,6 +1,7 @@
 import json
 from importlib import import_module
 
+import httpx
 import pytest
 from httpx import AsyncClient
 
@@ -496,6 +497,67 @@ async def test_requirement_chat_falls_back_when_ai_fails(
     assert created["followupQuestions"]
     assert "售后" in created["messages"][-1]["content"]
     assert "订单" in created["messages"][-1]["content"]
+
+
+async def test_followup_confirm_falls_back_when_ai_times_out(
+    api_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = await auth_headers(api_client)
+    create_response = await api_client.post(
+        "/api/v1/requirements",
+        headers=headers,
+        json={
+            "title": "个人助手 Agent",
+            "initialMessage": "我想做一个个人助手 Agent，直接在 AgentPro 里使用。",
+        },
+    )
+    assert create_response.status_code == 200
+    created = create_response.json()["data"]
+    requirement_id = created["id"]
+    question_key = created["followupQuestions"][0]["key"]
+
+    await api_client.put(
+        "/api/v1/model/config",
+        headers=headers,
+        json={
+            "provider": "sub2api",
+            "baseUrl": "https://slow.example.com/v1",
+            "model": "slow-model",
+            "apiKey": "slow-secret",
+        },
+    )
+
+    async def timeout_chat_completion(
+        base_url: str,
+        api_key: str | None,
+        model: str,
+        messages: list[dict[str, str]],
+    ) -> str:
+        raise httpx.ReadTimeout("model provider timeout")
+
+    ai_module = import_module("app.modules.requirements.ai_service")
+    monkeypatch.setattr(ai_module, "call_openai_chat_completion", timeout_chat_completion)
+
+    confirm_response = await api_client.post(
+        f"/api/v1/requirements/{requirement_id}/followups/confirm",
+        headers=headers,
+        json={
+            "decisions": [
+                {
+                    "key": question_key,
+                    "value": "在 AgentPro 内直接使用。",
+                    "confirmed": True,
+                }
+            ]
+        },
+    )
+
+    assert confirm_response.status_code == 200
+    confirmed = confirm_response.json()["data"]
+    assert any(item["key"] == question_key for item in confirmed["decisions"])
+    assert confirmed["messages"][-1]["role"] == "assistant"
+    assert confirmed["graphRunId"]
 
 
 async def test_requirement_chat_keeps_plain_text_ai_response(

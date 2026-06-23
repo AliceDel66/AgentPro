@@ -72,6 +72,7 @@ cp backend/.env.example backend/.env
 - `AGENTPRO_SMTP_USER`
 - `AGENTPRO_SMTP_PASSWORD`
 - `AGENTPRO_SMTP_FROM`
+- `AGENTPRO_REQUIREMENT_AI_TIMEOUT_SECONDS`：需求访谈非流式 AI 结构化调用最大等待秒数，建议生产保持 `12`。超时后后端会降级到规则图谱，避免桌面端提交回答等待到 30 秒请求超时。
 
 注意：
 - 不要把 `.env` 提交到 Git。
@@ -101,6 +102,7 @@ npm run dev
 - 模型配置页的“获取模型”按钮会用当前输入的 Base URL 与 API Key 调用后端 `/api/v1/model/test`，后端再请求 `${baseUrl}/models` 获取最新模型列表。
 - Base URL、API Key 或服务商变更后，前端会清空旧模型列表和默认模型，避免保存过期模型。
 - 需求访谈、继续对话和反问确认会读取已保存模型配置，优先调用 `${baseUrl}/chat/completions` 生成智能回复、追问、AgentSpec 草案和安全评审。
+- 反问确认使用非流式 AI 结构化图谱，必须受 `AGENTPRO_REQUIREMENT_AI_TIMEOUT_SECONDS` 约束；模型服务慢或不可达时应快速降级返回，而不是让桌面端请求先超时。
 - 如果模型返回普通文本而不是 JSON，后端会保留这段文本作为真实助手回复，并用场景化 RequirementGraph 补齐追问和结构状态。
 - 如果模型配置缺失、模型服务不可用或返回空内容，后端会降级到本地场景化 RequirementGraph，接口仍保持可用。
 

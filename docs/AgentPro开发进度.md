@@ -16,6 +16,33 @@
 
 ## 进度记录
 
+### 2026-06-23 反问确认接口 AI 超时兜底修复
+- 状态：已完成
+- 完成功能：
+  - 服务器排查确认 Docker `api` 容器处于 `healthy`，`127.0.0.1:8000/api/v1/health` 与 HTTPS 入口均返回 `ok: true`
+  - 定位“提交回答”超时根因：`POST /api/v1/requirements/{id}/followups/confirm` 内部等待非流式 AI 图谱调用，模型服务 `ReadTimeout` 接近桌面端 30 秒请求上限，导致服务端最终完成但前端先报超时
+  - 新增 `AGENTPRO_REQUIREMENT_AI_TIMEOUT_SECONDS` 后端配置，默认 12 秒；非流式 AI 结构化调用超时后立即走已有规则 RequirementGraph 兜底
+  - 补充回归测试，覆盖反问确认阶段模型服务超时时仍返回 200、保存用户确认并生成 graph run
+  - 同步 README、后端部署文档和 `.env.example`，明确生产建议保持 12 秒兜底，避免桌面端提交回答超时
+- 相关文件：
+  - `backend/app/core/config.py`
+  - `backend/app/modules/requirements/ai_service.py`
+  - `backend/tests/test_requirements.py`
+  - `backend/.env.example`
+  - `README.md`
+  - `docs/AgentPro后端部署.md`
+  - `docs/AgentPro开发进度.md`
+- 验证结果：
+  - 已通过服务器只读检查：`docker compose ps` 显示 `backend-api-1` 为 `Up ... (healthy)`
+  - 已通过服务器本机 `curl http://127.0.0.1:8000/api/v1/health`
+  - 已通过远端 `curl https://api.zgonline.top/agentpro/api/v1/health`
+  - 已通过当前桌面端 token 查询同一 requirement，远端已完成确认并返回 `ready_for_spec`、`followups: 0`、`decisions: 5`
+  - 已通过 `backend/.venv/bin/python -m pytest backend/tests/test_requirements.py`
+  - 已通过 `backend/.venv/bin/python -m ruff check backend/app backend/tests/test_requirements.py`
+  - 已通过 `npm run typecheck`
+  - 已通过 `npm run build`
+  - 已通过 `git diff --check`
+
 ### 2026-06-23 桌面端远端托管后端默认入口修复
 - 状态：已完成
 - 完成功能：

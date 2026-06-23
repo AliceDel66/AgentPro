@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     runner_workspace_root: str = ""
     runner_command_timeout_seconds: int = 1800
     runner_max_output_chars: int = 20000
+    requirement_ai_timeout_seconds: float = 12.0
 
     @property
     def cors_origins(self) -> list[str]:
