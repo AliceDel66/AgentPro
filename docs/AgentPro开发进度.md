@@ -16,6 +16,33 @@
 
 ## 进度记录
 
+### 2026-06-23 需求访谈批量问答协议修复
+- 状态：已完成
+- 完成功能：
+  - 需求访谈 followup 从“适用/不适用”式确认项改为真实 question-answer 对；普通问题不再自动补泛化选项。
+  - 后端 AI 结构化归一化会过滤“确认 / 适用 / 不适用”以及旧模板候选项；只有真实业务候选项才返回 `options`。
+  - 规则 RequirementGraph 只在交付形态等真实选择题上返回候选项，其他问题只返回问题与原因。
+  - `ChatPage` 底部面板改为一次展示全部待回答问题；用户必须逐题填写后统一提交本批回答，不再一题一提交。
+  - 旧 `FollowupPage` 保持兼容，但同步改为“问题回答”语义，不再默认写入“用户已确认”。
+  - workflow 提示、顶部状态和 README 流程图同步改为“待回答 / 需求澄清 / 批量提交”。
+- 相关文件：
+  - `backend/app/modules/requirements/ai_service.py`
+  - `backend/app/modules/requirements/graph.py`
+  - `backend/app/modules/requirements/router.py`
+  - `backend/tests/test_requirements.py`
+  - `src/pages/workspace/ChatPage.tsx`
+  - `src/pages/workspace/FollowupPage.tsx`
+  - `src/components/workflow/InlineWorkflowPanel.tsx`
+  - `README.md`
+  - `docs/AgentPro开发进度.md`
+- 验证结果：
+  - 已通过 `backend/.venv/bin/python -m ruff check backend/app/modules/requirements backend/tests/test_requirements.py`
+  - 已通过 `backend/.venv/bin/python -m pytest backend/tests/test_requirements.py`（15 passed）
+  - 已通过 `backend/.venv/bin/python -m pytest backend/tests`（74 passed）
+  - 已通过 `npm run typecheck`
+  - 已通过 `npm run build`
+  - 已用本地 FastAPI + Vite + 内置浏览器验证：5 个待回答问题一次展示，旧模板选项不再显示，全部填写后提交按钮才启用，一次提交后进入可生成 AgentSpec 状态。
+
 ### 2026-06-23 反问确认 timeout 后状态自动同步
 - 状态：已完成
 - 完成功能：

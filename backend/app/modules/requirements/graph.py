@@ -133,14 +133,12 @@ GENERIC_QUESTION_TEMPLATES = {
     ),
 }
 
-GENERIC_OPTIONS = {
-    "target_users": ["个人自己使用", "团队成员使用", "多个角色都使用", "不适用"],
-    "tools": ["代码仓库/提交记录", "任务系统/文档", "聊天记录/日报周报", "不适用"],
-    "permissions": ["只分析和建议", "允许创建草稿", "允许执行低风险动作", "不适用"],
-    "success_metrics": ["节省时间", "提高准确率", "提升采纳率", "不适用"],
-    "fallback": ["暂停并询问我", "给出风险说明", "转人工复核", "不适用"],
-    "data_sources": ["用户手动上传", "读取内部系统", "使用本地文件夹", "不适用"],
-    "delivery_target": ["在 AgentPro 内使用", "接入外部平台", "独立后台运行", "不适用"],
+QUESTION_OPTIONS = {
+    "delivery_target": [
+        "在 AgentPro 内直接使用",
+        "接入飞书/企业微信等外部平台",
+        "作为独立后台运行",
+    ],
 }
 
 # Keywords that hint at the delivery/usage form so the rules path can pre-fill deliveryTarget.
@@ -199,12 +197,15 @@ def build_gap_question(key: str, scenario: str, subject: str) -> dict[str, Any]:
     question = scenario_questions.get(key)
     if not question:
         question = GENERIC_QUESTION_TEMPLATES[key].format(subject=subject)
-    return {
+    followup = {
         "key": key,
         "question": question,
         "reason": "补齐真实业务场景、权限边界和验收标准",
-        "options": GENERIC_OPTIONS.get(key, ["确认", "不适用"]),
     }
+    options = QUESTION_OPTIONS.get(key)
+    if options:
+        followup["options"] = options
+    return followup
 
 
 def confirmed_decision_keys(decisions: list[dict[str, Any]] | None) -> set[str]:

@@ -271,9 +271,9 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
     return (
       <>
         {errorStep}
-        <WorkflowStepMessage icon={<Sparkles size={17} />} title="先确认需求关键信息" description="你回答完上面的反问后，我再进入 AgentSpec、开发和评审 workflow。">
+        <WorkflowStepMessage icon={<Sparkles size={17} />} title="先补齐需求关键信息" description="你回答完上面的问题后，我再进入 AgentSpec、开发和评审 workflow。">
           <div className="rounded-lg bg-agent-bg px-3 py-2 text-xs leading-6 text-agent-muted">
-            还有 {pendingQuestions} 个问题待确认。当前不会提前展示后续开发步骤，避免用户误以为可以跳过需求确认。
+            还有 {pendingQuestions} 个问题待回答。当前不会提前展示后续开发步骤，避免用户误以为可以跳过需求澄清。
           </div>
         </WorkflowStepMessage>
       </>

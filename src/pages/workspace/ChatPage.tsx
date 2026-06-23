@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Bot, Check, ChevronDown, Send, X } from "lucide-react";
+import { Bot, Check, Send } from "lucide-react";
 import { RequirementSidebar } from "../../components/layout/RequirementSidebar";
 import { LoadingState } from "../../components/common/LoadingState";
 import { Spinner } from "../../components/common/Spinner";
@@ -19,6 +19,31 @@ interface ChatPageProps {
 
 const cachedRequirementDetails = new Map<string, RequirementDetail>();
 const REQUIREMENTS_CHANGED_EVENT = "agentpro:requirements-changed";
+const GENERIC_FOLLOWUP_OPTION_VALUES = new Set([
+  "确认",
+  "适用",
+  "不适用",
+  "用户已确认",
+  "需要确认",
+  "个人自己使用",
+  "团队成员使用",
+  "多个角色都使用",
+  "代码仓库/提交记录",
+  "任务系统/文档",
+  "聊天记录/日报周报",
+  "只分析和建议",
+  "允许创建草稿",
+  "允许执行低风险动作",
+  "节省时间",
+  "提高准确率",
+  "提升采纳率",
+  "暂停并询问我",
+  "给出风险说明",
+  "转人工复核",
+  "用户手动上传",
+  "读取内部系统",
+  "使用本地文件夹"
+]);
 
 function titleFromMessage(message: string) {
   const normalized = message.trim().replace(/\s+/g, " ");
@@ -26,7 +51,7 @@ function titleFromMessage(message: string) {
 }
 
 function questionText(question: Record<string, unknown>) {
-  return String(question.question ?? question.title ?? question.key ?? "待确认问题");
+  return String(question.question ?? question.title ?? question.key ?? "待回答问题");
 }
 
 function questionKey(question: Record<string, unknown>, index: number) {
@@ -58,20 +83,13 @@ function normalizeFollowupOption(item: unknown): FollowupOption | null {
 function questionOptions(question: Record<string, unknown>): FollowupOption[] {
   const raw = question.options ?? question.choices ?? question.suggestions;
   if (Array.isArray(raw)) {
-    const options = raw
+    return raw
       .map(normalizeFollowupOption)
       .filter((item): item is FollowupOption => Boolean(item))
+      .filter((item) => !GENERIC_FOLLOWUP_OPTION_VALUES.has(item.value))
       .slice(0, 4);
-    if (options.length) return options;
   }
-  return [
-    { label: "确认", value: "确认" },
-    { label: "不适用", value: "不适用" }
-  ];
-}
-
-function isOptionValue(value: string, options: FollowupOption[]) {
-  return options.some((option) => option.value === value);
+  return [];
 }
 
 export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId }: ChatPageProps) {
@@ -83,7 +101,6 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
   const [streamingText, setStreamingText] = useState("");
   const [animateMessageId, setAnimateMessageId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [currentFollowupIndex, setCurrentFollowupIndex] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
@@ -100,7 +117,6 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
       setLoading(false);
       setAnimateMessageId(null);
       setAnswers({});
-      setCurrentFollowupIndex(0);
       setErrorMessage(null);
       setNoticeMessage(null);
       return undefined;
@@ -110,7 +126,6 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     setDetail(cached ?? null);
     setAnimateMessageId(null);
     setAnswers({});
-    setCurrentFollowupIndex(0);
     setLoading(!cached);
 
     async function loadRequirement() {
@@ -135,14 +150,6 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
   }, [activeRequirementId]);
 
   const pendingQuestions = detail?.followupQuestions ?? [];
-
-  useEffect(() => {
-    if (!pendingQuestions.length) {
-      setCurrentFollowupIndex(0);
-      return;
-    }
-    setCurrentFollowupIndex((index) => Math.min(index, pendingQuestions.length - 1));
-  }, [pendingQuestions.length]);
 
   // Keep the conversation pinned to the latest message while loading / thinking.
   useEffect(() => {
@@ -200,7 +207,6 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
       const assistantMessages = result.data.messages.filter((message) => message.role === "assistant");
       setAnimateMessageId(assistantMessages[assistantMessages.length - 1]?.id ?? null);
       setAnswers({});
-      setCurrentFollowupIndex(0);
     } catch (error) {
       const message = error instanceof Error ? error.message : "提交回答失败";
       const reconciled = await reconcileRequirementFollowupConfirmation(activeRequirementId, submittedDecisions);
@@ -212,7 +218,6 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
       }
       if (reconciled.accepted && reconciled.detail) {
         setAnswers({});
-        setCurrentFollowupIndex(0);
         setNoticeMessage("提交请求超时，但服务端已完成确认，已同步最新状态。");
       } else {
         setErrorMessage(reconciled.detail ? `${message}；已刷新服务端状态，但确认尚未完成。` : `${message}；自动刷新服务端状态失败，请稍后重试。`);
@@ -222,39 +227,27 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     }
   };
 
-  const activeQuestionIndex = Math.min(currentFollowupIndex, Math.max(0, pendingQuestions.length - 1));
-  const activeQuestion = pendingQuestions[activeQuestionIndex] ?? null;
-  const activeQuestionKey = activeQuestion ? questionKey(activeQuestion, activeQuestionIndex) : "";
-  const activeQuestionValue = activeQuestion ? answers[activeQuestionKey] ?? "" : "";
-  const activeQuestionOptions = activeQuestion ? questionOptions(activeQuestion) : [];
-  const customAnswerValue = activeQuestionValue && !isOptionValue(activeQuestionValue, activeQuestionOptions) ? activeQuestionValue : "";
+  const answeredFollowupCount = pendingQuestions.filter((question, index) => {
+    const key = questionKey(question, index);
+    return Boolean((answers[key] ?? "").trim());
+  }).length;
+  const allFollowupsAnswered = pendingQuestions.length > 0 && answeredFollowupCount === pendingQuestions.length;
 
-  const selectActiveAnswer = (value: string) => {
-    if (!activeQuestionKey) return;
-    setAnswers((current) => ({ ...current, [activeQuestionKey]: value }));
+  const updateFollowupAnswer = (key: string, value: string) => {
+    setAnswers((current) => ({ ...current, [key]: value }));
   };
 
-  const handleSubmitActiveFollowup = async () => {
-    if (!activeQuestion || !activeQuestionValue.trim()) return;
-    await submitFollowupDecisions([
-      {
-        key: activeQuestionKey,
-        value: activeQuestionValue.trim(),
+  const handleSubmitAllFollowups = async () => {
+    if (!allFollowupsAnswered) return;
+    const decisions = pendingQuestions.map((question, index) => {
+      const key = questionKey(question, index);
+      return {
+        key,
+        value: (answers[key] ?? "").trim(),
         confirmed: true
-      }
-    ]);
-  };
-
-  const handleSkipActiveFollowup = async () => {
-    if (!activeQuestion) return;
-    selectActiveAnswer("不适用");
-    await submitFollowupDecisions([
-      {
-        key: activeQuestionKey,
-        value: "不适用",
-        confirmed: true
-      }
-    ]);
+      };
+    });
+    await submitFollowupDecisions(decisions);
   };
 
   const handleMainInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -264,39 +257,10 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
   };
 
   const handleFollowupKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey) return;
+    if (event.key !== "Enter" || (!event.metaKey && !event.ctrlKey)) return;
     event.preventDefault();
-    void handleSubmitActiveFollowup();
+    void handleSubmitAllFollowups();
   };
-
-  const handleFollowupPanelKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!activeQuestionOptions.length || event.target instanceof HTMLTextAreaElement) return;
-    const optionIndex = Number(event.key) - 1;
-    if (Number.isInteger(optionIndex) && activeQuestionOptions[optionIndex]) {
-      event.preventDefault();
-      selectActiveAnswer(activeQuestionOptions[optionIndex].value);
-      return;
-    }
-    if (event.key === "Enter" && activeQuestionValue.trim()) {
-      event.preventDefault();
-      void handleSubmitActiveFollowup();
-    }
-  };
-
-  useEffect(() => {
-    if (!activeQuestion || sending || confirming) return undefined;
-    const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
-      const target = event.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-      const optionIndex = Number(event.key) - 1;
-      if (Number.isInteger(optionIndex) && activeQuestionOptions[optionIndex]) {
-        event.preventDefault();
-        selectActiveAnswer(activeQuestionOptions[optionIndex].value);
-      }
-    };
-    window.addEventListener("keydown", handleWindowKeyDown);
-    return () => window.removeEventListener("keydown", handleWindowKeyDown);
-  }, [activeQuestion, activeQuestionOptions, confirming, sending]);
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -359,109 +323,88 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
         </div>
 
         <div className="border-t border-agent-divider bg-white px-7 py-4">
-          {detail && !sending && activeQuestion ? (
+          {detail && !sending && pendingQuestions.length > 0 ? (
             <div className="mx-auto max-w-[940px]">
-              <div
-                className="mb-2 rounded-xl border border-agent-border bg-white p-3.5 shadow-[0_8px_24px_rgba(11,18,32,0.07)]"
-                tabIndex={0}
-                onKeyDown={handleFollowupPanelKeyDown}
-              >
-                <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="mb-2 rounded-xl border border-agent-border bg-white p-3.5 shadow-[0_8px_24px_rgba(11,18,32,0.07)]">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-[13px] font-semibold text-agent-ink">
-                      <span className="rounded-md bg-[#F7EFCB] px-1.5 py-0.5 text-[11px] font-bold text-[#9A7A16]">
-                        {activeQuestionIndex + 1}/{pendingQuestions.length}
-                      </span>
-                      <span className="leading-6">{questionText(activeQuestion)}</span>
+                    <div className="text-[13px] font-semibold text-agent-ink">需要补充这些问题后统一提交</div>
+                    <div className="mt-1 text-xs leading-5 text-agent-muted">
+                      已填写 {answeredFollowupCount}/{pendingQuestions.length}，每个问题会作为一条真实答案写入需求记录。
                     </div>
-                    {activeQuestion.reason ? <div className="mt-1 text-xs leading-5 text-agent-muted">{String(activeQuestion.reason)}</div> : null}
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      className="grid h-7 w-7 place-items-center rounded-md bg-agent-bg text-agent-muted hover:text-agent-primary"
-                      title="收起"
-                      type="button"
-                    >
-                      <ChevronDown size={15} />
-                    </button>
-                    <button
-                      className="grid h-7 w-7 place-items-center rounded-md text-agent-muted hover:bg-red-50 hover:text-agent-danger"
-                      title="跳过"
-                      type="button"
-                      onClick={() => void handleSkipActiveFollowup()}
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-agent-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:bg-agent-divider disabled:text-agent-subtle"
+                    disabled={confirming || !allFollowupsAnswered}
+                    type="button"
+                    onClick={() => void handleSubmitAllFollowups()}
+                  >
+                    {confirming ? <Spinner size={13} className="text-white" /> : null}
+                    提交 {pendingQuestions.length} 个回答
+                    <span className="text-[11px] opacity-75">⌘↵</span>
+                  </button>
                 </div>
 
-                <div className="overflow-hidden rounded-lg border border-agent-divider">
-                  {activeQuestionOptions.map((option, index) => {
-                    const selected = activeQuestionValue === option.value;
+                <div className="max-h-[44vh] space-y-3 overflow-y-auto pr-1">
+                  {pendingQuestions.map((question, index) => {
+                    const key = questionKey(question, index);
+                    const value = answers[key] ?? "";
+                    const options = questionOptions(question);
                     return (
-                      <button
-                        className={`flex w-full items-center gap-3 border-b border-agent-divider px-3 py-2.5 text-left transition-colors last:border-b-0 ${
-                          selected ? "bg-agent-pale" : "bg-[#F7F7F7] hover:bg-agent-bg"
-                        }`}
-                        disabled={confirming}
-                        key={`${option.value}-${index}`}
-                        type="button"
-                        onClick={() => selectActiveAnswer(option.value)}
-                      >
-                        <span className={`min-w-0 flex-1 ${selected ? "text-agent-primary" : "text-agent-ink"}`}>
-                          <span className="block text-[13px] font-semibold leading-5">{option.label}</span>
-                          {option.description ? <span className="mt-0.5 block text-xs leading-5 text-agent-muted">{option.description}</span> : null}
-                        </span>
-                        <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border text-[11px] font-semibold ${
-                          selected ? "border-agent-primary bg-white text-agent-primary" : "border-agent-border bg-white text-agent-muted"
-                        }`}>
-                          {selected ? <Check size={13} strokeWidth={2.5} /> : index + 1}
-                        </span>
-                      </button>
+                      <div className="rounded-lg border border-agent-divider bg-[#F8FAFC] p-3" key={key}>
+                        <div className="flex items-start gap-2.5">
+                          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-agent-pale text-[12px] font-bold text-agent-primary">
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-semibold leading-6 text-agent-ink">{questionText(question)}</div>
+                            {question.reason ? <div className="mt-0.5 text-xs leading-5 text-agent-muted">{String(question.reason)}</div> : null}
+                          </div>
+                        </div>
+
+                        {options.length ? (
+                          <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                            {options.map((option, optionIndex) => {
+                              const selected = value.trim() === option.value;
+                              return (
+                                <button
+                                  className={`flex min-h-[38px] items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[12px] transition-colors ${
+                                    selected
+                                      ? "border-agent-primary bg-white text-agent-primary"
+                                      : "border-agent-border bg-white text-agent-secondary hover:border-agent-primary hover:bg-agent-pale"
+                                  }`}
+                                  disabled={confirming}
+                                  key={`${key}-${option.value}-${optionIndex}`}
+                                  type="button"
+                                  onClick={() => updateFollowupAnswer(key, option.value)}
+                                >
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block font-semibold leading-5">{option.label}</span>
+                                    {option.description ? <span className="mt-0.5 block leading-5 text-agent-muted">{option.description}</span> : null}
+                                  </span>
+                                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border ${
+                                    selected ? "border-agent-primary bg-agent-pale text-agent-primary" : "border-agent-border text-agent-muted"
+                                  }`}>
+                                    {selected ? <Check size={12} strokeWidth={2.5} /> : null}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+
+                        <textarea
+                          className="agent-input mt-2 min-h-[54px] w-full resize-none rounded-lg px-3 py-2.5 text-sm leading-6"
+                          disabled={confirming}
+                          placeholder={options.length ? "可直接选择上方答案，也可以在这里改写..." : "在这里填写这道问题的答案..."}
+                          rows={2}
+                          value={value}
+                          onChange={(event) => updateFollowupAnswer(key, event.target.value)}
+                          onKeyDown={handleFollowupKeyDown}
+                        />
+                      </div>
                     );
                   })}
-                </div>
-
-                <div className="mt-3 text-[13px] font-semibold text-agent-ink">Other</div>
-                <textarea
-                  className="agent-input mt-2 min-h-[40px] w-full resize-none rounded-lg px-3.5 py-2.5 text-sm leading-6"
-                  disabled={confirming}
-                  placeholder="Type your own answer here"
-                  rows={1}
-                  value={customAnswerValue}
-                  onChange={(event) => selectActiveAnswer(event.target.value)}
-                  onKeyDown={handleFollowupKeyDown}
-                />
-
-                <div className="mt-3 flex items-center justify-between">
-                  <button
-                    className="rounded-lg border border-agent-border bg-white px-3 py-1.5 text-xs font-semibold text-agent-secondary shadow-sm hover:border-agent-primary hover:text-agent-primary disabled:cursor-not-allowed disabled:opacity-45"
-                    disabled={confirming || activeQuestionIndex === 0}
-                    type="button"
-                    onClick={() => setCurrentFollowupIndex((index) => Math.max(0, index - 1))}
-                  >
-                    Back
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="rounded-lg border border-agent-border bg-white px-3 py-1.5 text-xs font-semibold text-agent-secondary shadow-sm hover:border-agent-primary hover:text-agent-primary disabled:cursor-not-allowed disabled:opacity-45"
-                      disabled={confirming}
-                      type="button"
-                      onClick={() => void handleSkipActiveFollowup()}
-                    >
-                      Skip
-                    </button>
-                    <button
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-agent-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:bg-agent-divider disabled:text-agent-subtle"
-                      disabled={confirming || !activeQuestionValue.trim()}
-                      type="button"
-                      onClick={() => void handleSubmitActiveFollowup()}
-                    >
-                      {confirming ? <Spinner size={13} className="text-white" /> : null}
-                      Submit
-                      <span className="text-[11px] opacity-75">↵</span>
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -469,13 +412,13 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
                 <textarea
                   className="agent-input min-h-[42px] flex-1 resize-none rounded-xl px-[18px] py-3 text-sm leading-6"
                   disabled
-                  placeholder="先完成上方确认项..."
+                  placeholder={`先完成上方 ${pendingQuestions.length} 个问题并统一提交...`}
                   rows={1}
                 />
                 <button
                   className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[10px] bg-agent-primary text-white opacity-45"
                   disabled
-                  title="先完成上方确认项"
+                  title="先完成上方问题"
                   type="button"
                 >
                   <Send size={18} />
@@ -518,7 +461,7 @@ function RequirementStatusTop({ detail, confirmedCount, pendingQuestions }: { de
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-center justify-between gap-3">
             <div className="truncate text-sm font-semibold text-agent-ink">{detail.title}</div>
-            <StatusChip tone={ready ? "cyan" : "orange"}>{ready ? "可进入 workflow" : "待确认"}</StatusChip>
+            <StatusChip tone={ready ? "cyan" : "orange"}>{ready ? "可进入 workflow" : "待回答"}</StatusChip>
           </div>
           <div className="flex items-center gap-3">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-agent-divider">
@@ -529,7 +472,7 @@ function RequirementStatusTop({ detail, confirmedCount, pendingQuestions }: { de
         </div>
         <div className="hidden grid-cols-2 gap-2 text-xs sm:grid">
           <StatusMetric label="已确认" value={confirmedCount} />
-          <StatusMetric label="待反问" value={pendingQuestions} />
+          <StatusMetric label="待回答" value={pendingQuestions} />
         </div>
       </div>
     </div>

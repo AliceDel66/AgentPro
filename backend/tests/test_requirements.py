@@ -4,7 +4,8 @@ from importlib import import_module
 import pytest
 from httpx import AsyncClient
 
-from app.modules.requirements.graph import run_requirement_graph
+from app.modules.requirements.ai_service import normalize_followups
+from app.modules.requirements.graph import build_gap_question, run_requirement_graph
 
 
 async def auth_headers(client: AsyncClient) -> dict[str, str]:
@@ -229,6 +230,41 @@ def test_requirement_graph_filters_confirmed_followup_keys() -> None:
     assert "target_users" not in state["gaps"]
 
 
+def test_requirement_graph_does_not_emit_generic_applicability_options() -> None:
+    target_users = build_gap_question("target_users", "generic", "开发 Agent")
+    delivery_target = build_gap_question("delivery_target", "generic", "开发 Agent")
+
+    assert "options" not in target_users
+    assert delivery_target["options"] == [
+        "在 AgentPro 内直接使用",
+        "接入飞书/企业微信等外部平台",
+        "作为独立后台运行",
+    ]
+    assert "不适用" not in delivery_target["options"]
+
+
+def test_ai_followup_normalization_filters_template_options() -> None:
+    followups = normalize_followups(
+        [
+            {
+                "key": "tools",
+                "question": "它需要连接哪些开发工具？",
+                "reason": "确认数据来源",
+                "options": ["代码仓库/提交记录", "任务系统/文档", "内部 GitLab", "Jira"],
+            }
+        ]
+    )
+
+    assert followups == [
+        {
+            "key": "tools",
+            "question": "它需要连接哪些开发工具？",
+            "reason": "确认数据来源",
+            "options": ["内部 GitLab", "Jira"],
+        }
+    ]
+
+
 async def test_confirmed_followup_answers_are_not_repeated(api_client: AsyncClient) -> None:
     headers = await auth_headers(api_client)
     create_response = await api_client.post(
@@ -263,7 +299,7 @@ async def test_confirmed_followup_answers_are_not_repeated(api_client: AsyncClie
     remaining_keys = {item["key"] for item in confirmed["followupQuestions"]}
     assert first_question["key"] not in remaining_keys
     assert confirmed["messages"][-2]["role"] == "user"
-    assert "已确认反问" in confirmed["messages"][-2]["content"]
+    assert "已提交回答" in confirmed["messages"][-2]["content"]
     assert first_question["question"] not in confirmed["messages"][-1]["content"]
 
 
@@ -370,7 +406,7 @@ async def test_requirement_stream_uses_ai_structured_followups(
     live_catalog = next(
         item for item in detail["followupQuestions"] if item["key"] == "live_catalog"
     )
-    assert live_catalog["options"] == ["只覆盖美妆类目", "覆盖全品类", "不适用"]
+    assert live_catalog["options"] == ["只覆盖美妆类目", "覆盖全品类"]
     assert detail["messages"][-1]["content"] == "结构化分析"
     assert all(
         key not in followup_keys for key in ("target_users", "tools", "permissions")

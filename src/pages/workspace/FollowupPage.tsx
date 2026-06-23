@@ -15,7 +15,7 @@ interface FollowupPageProps {
 const cachedFollowupDetails = new Map<string, RequirementDetail>();
 
 function questionText(question: Record<string, unknown>) {
-  return String(question.question ?? question.title ?? question.key ?? "待确认问题");
+  return String(question.question ?? question.title ?? question.key ?? "待回答问题");
 }
 
 function questionKey(question: Record<string, unknown>, index: number) {
@@ -69,14 +69,19 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
   }, [activeRequirementId]);
 
   const pendingQuestions = detail?.followupQuestions ?? [];
+  const answeredCount = pendingQuestions.filter((question, index) => {
+    const key = questionKey(question, index);
+    return Boolean((answers[key] ?? "").trim());
+  }).length;
+  const allAnswered = pendingQuestions.length === 0 || answeredCount === pendingQuestions.length;
 
   const handleConfirm = async () => {
-    if (!activeRequirementId || saving) return;
+    if (!activeRequirementId || saving || !allAnswered) return;
     const decisions = pendingQuestions.map((question, index) => {
       const key = questionKey(question, index);
       return {
         key,
-        value: answers[key]?.trim() || "用户已确认",
+        value: answers[key]?.trim() ?? "",
         confirmed: true
       };
     });
@@ -121,7 +126,7 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
             </div>
             <div className="min-w-0 max-w-[640px] flex-1">
               <div className="mb-4 rounded-[4px_16px_16px_16px] border border-agent-border bg-white px-[22px] py-[18px] text-sm leading-7 text-agent-secondary shadow-[0_1px_4px_rgba(11,18,32,0.04)]">
-                基于我们的对话，我整理了一些需要你确认的选项。每个决定都会影响 Agent 的最终设计：
+                基于我们的对话，我整理了一些需要你回答的问题。全部填写后统一提交，系统会继续生成后续 AgentSpec。
               </div>
 
               {pendingQuestions.length ? (
@@ -129,11 +134,11 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
                   const key = questionKey(question, index);
                   return (
                     <div className="mb-3.5 rounded-xl border border-agent-border bg-white p-[22px]" key={key}>
-                      <div className="mb-1 text-sm font-semibold text-agent-ink">决策 {index + 1}</div>
+                      <div className="mb-1 text-sm font-semibold text-agent-ink">问题 {index + 1}</div>
                       <div className="mb-3 text-[13px] leading-6 text-agent-secondary">{questionText(question)}</div>
                       <textarea
                         className="agent-input min-h-[74px] resize-none px-4 py-3 text-sm leading-6"
-                        placeholder="填写你的确认结果或约束条件..."
+                        placeholder="填写这道问题的答案..."
                         value={answers[key] ?? ""}
                         onChange={(event) => setAnswers((current) => ({ ...current, [key]: event.target.value }))}
                       />
@@ -143,7 +148,7 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
                 })
               ) : (
                 <div className="rounded-xl border border-agent-border bg-white p-[22px]">
-                  <div className="text-sm font-semibold text-agent-ink">当前没有待确认问题</div>
+                  <div className="text-sm font-semibold text-agent-ink">当前没有待回答问题</div>
                   <div className="mt-1.5 text-[13px] leading-6 text-agent-muted">
                     需求关键信息已较完整。可以直接生成 AgentSpec 草案，或返回访谈补充更多细节。
                   </div>
@@ -177,13 +182,13 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
             </button>
             <button
               className="inline-flex shrink-0 items-center justify-center gap-2 rounded-[10px] bg-agent-primary px-[22px] py-3 text-[13px] font-semibold text-white hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={!activeRequirementId || saving}
+              disabled={!activeRequirementId || saving || !allAnswered}
               aria-busy={saving}
               type="button"
               onClick={() => void handleConfirm()}
             >
               {saving ? <Spinner size={15} className="text-white" /> : null}
-              {saving ? "保存中..." : "确认选择"}
+              {saving ? "保存中..." : pendingQuestions.length ? `提交 ${pendingQuestions.length} 个回答` : "继续生成 AgentSpec"}
             </button>
           </div>
         </div>
@@ -197,12 +202,12 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
           <Panel tone="green" icon={<Check size={14} strokeWidth={2.5} />} title="当前需求">
             {detail?.title ?? "未选择需求"}
           </Panel>
-          <Panel tone="orange" icon={<CircleAlert size={14} />} title="待确认">
-            {pendingQuestions.length ? `${pendingQuestions.length} 个问题` : "暂无"}
+          <Panel tone="orange" icon={<CircleAlert size={14} />} title="待回答">
+            {pendingQuestions.length ? `${answeredCount}/${pendingQuestions.length} 已填写` : "暂无"}
           </Panel>
           <div className="rounded-[10px] bg-agent-pale p-3.5">
             <div className="mb-1.5 text-xs font-semibold text-agent-primary">系统评估</div>
-            <div className="text-xs leading-6 text-agent-secondary">确认后会重新运行需求图谱，并用于生成 AgentSpec。</div>
+            <div className="text-xs leading-6 text-agent-secondary">提交回答后会重新运行需求图谱，并用于生成 AgentSpec。</div>
           </div>
         </div>
       </aside>

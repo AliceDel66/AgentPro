@@ -101,7 +101,7 @@ def format_decision_value(value: Any) -> str:
 
 
 def followup_confirmation_message(decisions: list[dict[str, Any]]) -> str:
-    lines = ["已确认反问："]
+    lines = ["已提交回答："]
     for item in decisions:
         lines.append(f"- {item['key']}：{format_decision_value(item.get('value'))}")
     return "\n".join(lines)
@@ -134,9 +134,9 @@ def merge_confirmed_decisions(
 
 def assistant_confirmation_text(followups: list[dict[str, Any]]) -> str:
     if not followups:
-        return "已记录你的确认，当前需求关键信息已经比较完整，可以生成 AgentSpec 草案。"
+        return "已记录你的回答，当前需求关键信息已经比较完整，可以生成 AgentSpec 草案。"
 
-    lines = ["已记录你的回答。还需要确认："]
+    lines = ["已记录你的回答。还需要补充："]
     lines.extend(
         f"{index}. {item['question']}" for index, item in enumerate(followups, start=1)
     )
