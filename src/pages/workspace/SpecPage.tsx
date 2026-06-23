@@ -13,6 +13,8 @@ interface SpecPageProps {
   setActiveSpecId: (specId: string | null) => void;
 }
 
+const cachedSpecs = new Map<string, AgentSpecDraft | null>();
+
 function asList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((item) => (typeof item === "string" ? item : JSON.stringify(item)));
   if (typeof value === "string" && value) return [value];
@@ -28,7 +30,7 @@ function getRiskList(body: Record<string, unknown>) {
 }
 
 export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: SpecPageProps) {
-  const [spec, setSpec] = useState<AgentSpecDraft | null>(null);
+  const [spec, setSpec] = useState<AgentSpecDraft | null>(activeRequirementId ? cachedSpecs.get(activeRequirementId) ?? null : null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [action, setAction] = useState<"approve" | "archive" | null>(null);
@@ -43,19 +45,23 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
       return undefined;
     }
     const requirementId = activeRequirementId;
+    const cached = cachedSpecs.get(requirementId);
+    if (cached !== undefined) setSpec(cached);
 
     async function loadSpec() {
-      setLoading(true);
+      setLoading(cached === undefined);
       setErrorMessage(null);
       try {
         // Reading only: opening the page must not generate a new version.
         const result = await getAgentSpec(requirementId);
+        cachedSpecs.set(requirementId, result.data);
         if (!cancelled) {
           setSpec(result.data);
           setActiveSpecId(result.data.id);
         }
       } catch {
         // No spec yet is the expected empty case; show the generate prompt, not an error.
+        cachedSpecs.set(requirementId, null);
         if (!cancelled) setSpec(null);
       } finally {
         if (!cancelled) setLoading(false);
@@ -84,7 +90,11 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
     setErrorMessage(null);
     try {
       const result = await approveAgentSpec(activeRequirementId);
-      if (result.data.spec?.id) setActiveSpecId(result.data.spec.id);
+      if (result.data.spec?.id) {
+        cachedSpecs.set(activeRequirementId, result.data.spec);
+        setSpec(result.data.spec);
+        setActiveSpecId(result.data.spec.id);
+      }
       navigate("dispatch");
     } catch (error) {
       const message = error instanceof Error ? error.message : "审批 AgentSpec 失败";
@@ -118,6 +128,7 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
     setErrorMessage(null);
     try {
       const result = await generateAgentSpec(activeRequirementId);
+      cachedSpecs.set(activeRequirementId, result.data);
       setSpec(result.data);
       setActiveSpecId(result.data.id);
     } catch (error) {
@@ -137,7 +148,7 @@ export function SpecPage({ activeRequirementId, navigate, setActiveSpecId }: Spe
             <StatusChip tone={spec?.status === "approved" ? "green" : "blue"}>{spec?.status === "approved" ? "已审批" : "待审批"}</StatusChip>
           </div>
           <div className="-mt-4 mb-7 text-[13px] text-agent-muted">
-            {loading ? <LoadingState label="正在读取 AgentSpec..." /> : spec ? `AgentSpec v${spec.version}` : "尚未生成 AgentSpec 草案"}
+            {loading && !spec ? <LoadingState label="正在读取 AgentSpec..." /> : spec ? `AgentSpec v${spec.version}` : "尚未生成 AgentSpec 草案"}
           </div>
 
           {errorMessage ? <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}

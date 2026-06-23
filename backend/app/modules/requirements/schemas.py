@@ -12,6 +12,10 @@ class RequirementMessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
 
 
+class RequirementUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=180)
+
+
 class FollowupDecision(BaseModel):
     key: str
     value: Any

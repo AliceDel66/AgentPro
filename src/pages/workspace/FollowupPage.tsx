@@ -12,6 +12,8 @@ interface FollowupPageProps {
   navigate: Navigate;
 }
 
+const cachedFollowupDetails = new Map<string, RequirementDetail>();
+
 function questionText(question: Record<string, unknown>) {
   return String(question.question ?? question.title ?? question.key ?? "待确认问题");
 }
@@ -21,7 +23,7 @@ function questionKey(question: Record<string, unknown>, index: number) {
 }
 
 export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProps) {
-  const [detail, setDetail] = useState<RequirementDetail | null>(null);
+  const [detail, setDetail] = useState<RequirementDetail | null>(activeRequirementId ? cachedFollowupDetails.get(activeRequirementId) ?? null : null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -35,12 +37,15 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
       return undefined;
     }
     const requirementId = activeRequirementId;
+    const cached = cachedFollowupDetails.get(requirementId);
+    if (cached) setDetail(cached);
 
     async function loadRequirement() {
-      setLoading(true);
+      setLoading(!cached);
       setErrorMessage(null);
       try {
         const result = await getRequirementDetail(requirementId);
+        cachedFollowupDetails.set(requirementId, result.data);
         if (!cancelled) {
           setDetail(result.data);
           const nextAnswers: Record<string, string> = {};
@@ -97,7 +102,7 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
           <div className="mb-6 rounded-xl border border-agent-border bg-white px-5 py-4">
             <div className="mb-1.5 text-xs font-medium text-agent-subtle">对话摘要</div>
             <div className="text-[13px] leading-6 text-agent-secondary">
-              {loading ? <LoadingState label="正在读取需求..." /> : detail?.summary || "暂无摘要"}
+              {loading && !detail ? <LoadingState label="正在读取需求..." /> : detail?.summary || "暂无摘要"}
             </div>
           </div>
 

@@ -11,6 +11,8 @@ interface AgentsPageProps {
   setActiveAgent: (agent: DeliveredAgent | null) => void;
 }
 
+let cachedDeliveredAgents: DeliveredAgent[] | null = null;
+
 export function deliveryModeLabel(mode: string) {
   switch (mode) {
     case "in_app":
@@ -38,17 +40,18 @@ function deliveryTone(mode: string): "green" | "blue" | "purple" | "gray" {
 }
 
 export function AgentsPage({ navigate, setActiveAgent }: AgentsPageProps) {
-  const [agents, setAgents] = useState<DeliveredAgent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [agents, setAgents] = useState<DeliveredAgent[]>(cachedDeliveredAgents ?? []);
+  const [loading, setLoading] = useState(!cachedDeliveredAgents);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      setLoading(true);
+      setLoading(!cachedDeliveredAgents);
       setErrorMessage(null);
       try {
         const result = await getDeliveredAgents();
+        cachedDeliveredAgents = result.data;
         if (!cancelled) setAgents(result.data);
       } catch (error) {
         if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "读取已交付 Agent 失败");
@@ -75,7 +78,7 @@ export function AgentsPage({ navigate, setActiveAgent }: AgentsPageProps) {
       </div>
 
       {errorMessage ? <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
-      {loading ? <LoadingState className="px-1 py-6" label="正在读取已交付 Agent..." /> : null}
+      {loading && !agents.length ? <LoadingState className="px-1 py-6" label="正在读取已交付 Agent..." /> : null}
 
       {!loading && !agents.length ? (
         <div className="rounded-xl border border-dashed border-agent-border bg-white px-6 py-12 text-center">

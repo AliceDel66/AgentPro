@@ -16,11 +16,13 @@ interface MonitorPageProps {
   setActiveJobStatus: (status: string | null) => void;
 }
 
+const cachedJobSnapshots = new Map<string, { job: RunnerJob; events: RunnerEvent[] }>();
 const runnerSteps = ["创建隔离工作区", "读取需求文档", "代码实现", "运行测试", "提交候选方案"];
 
 export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobStatus }: MonitorPageProps) {
-  const [job, setJob] = useState<RunnerJob | null>(null);
-  const [events, setEvents] = useState<RunnerEvent[]>([]);
+  const initialSnapshot = activeJobId ? cachedJobSnapshots.get(activeJobId) : undefined;
+  const [job, setJob] = useState<RunnerJob | null>(initialSnapshot?.job ?? null);
+  const [events, setEvents] = useState<RunnerEvent[]>(initialSnapshot?.events ?? []);
   const [loading, setLoading] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -37,6 +39,12 @@ export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobS
       return undefined;
     }
     const jobId = activeJobId;
+    const cached = cachedJobSnapshots.get(jobId);
+    if (cached) {
+      setJob(cached.job);
+      setEvents(cached.events);
+      firstLoad = false;
+    }
 
     async function loadJob() {
       if (firstLoad) setLoading(true);
@@ -47,6 +55,7 @@ export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobS
           getRunnerEvents(jobId).catch(() => ({ ok: true, data: [] as RunnerEvent[] }))
         ]);
         if (!cancelled) {
+          cachedJobSnapshots.set(jobId, { job: jobResult.data, events: eventResult.data });
           setJob(jobResult.data);
           setEvents(eventResult.data);
           setActiveJobStatus(jobResult.data.status);
@@ -94,6 +103,7 @@ export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobS
       ]);
       setJob(jobResult.data);
       setEvents(eventResult.data);
+      cachedJobSnapshots.set(activeJobId, { job: jobResult.data, events: eventResult.data });
     } catch (error) {
       const message = error instanceof Error ? error.message : "取消本机 Runner 失败";
       setErrorMessage(message);

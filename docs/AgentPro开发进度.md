@@ -16,6 +16,48 @@
 
 ## 进度记录
 
+### 2026-06-23 访谈页工作流收敛、登录闪屏与需求管理修复
+- 状态：已完成
+- 完成功能：
+  - 修复 App 认证守卫在后台刷新账号时把 `loading` 当成未登录，导致设置页和受保护页面闪回 LoginPage 的问题
+  - 设置页模型配置与默认 Runner 保存目录增加模块级缓存，重新进入页面时优先展示已知配置并在后台刷新
+  - 需求访谈、反问确认、需求库、AgentSpec、并行监控、自动评审、报告档案、我的 Agent 等主要页面增加模块级缓存；重新进入页面时先展示缓存数据，接口刷新改为静默刷新，只有首次无缓存时才显示 LoadingState
+  - 需求访谈页右侧改为内嵌 Agent 工作流面板，可在同一页面生成/审批 AgentSpec、选择 Runner 策略、启动/取消真实开发、查看 Runner 事件并生成评审报告
+  - 侧边栏移除单独“需求草案”入口，需求库“下一步”统一回到需求访谈页并设置当前需求上下文，避免草案、调度、监控、评审反复跳页
+  - 需求侧栏支持重命名与移入垃圾篓，需求库补充重命名入口；后端新增 `PUT /api/v1/requirements/{requirement_id}` 持久化标题更新并记录审计
+  - 新增 AgentPro 品牌 logo 组件，并接入登录页和主应用侧栏入口；同步生成 Tauri 平台图标并在 `tauri.conf.json` 配置 `bundle.icon`
+- 相关文件：
+  - `src/App.tsx`
+  - `src/stores/authStore.ts`
+  - `src/pages/workspace/SettingsPage.tsx`
+  - `src/pages/workspace/ChatPage.tsx`
+  - `src/pages/workspace/FollowupPage.tsx`
+  - `src/pages/workspace/SpecPage.tsx`
+  - `src/pages/workspace/MonitorPage.tsx`
+  - `src/pages/workspace/ReviewPage.tsx`
+  - `src/pages/workspace/ReportsPage.tsx`
+  - `src/pages/workspace/AgentsPage.tsx`
+  - `src/components/workflow/InlineWorkflowPanel.tsx`
+  - `src/components/layout/AppShell.tsx`
+  - `src/components/layout/RequirementSidebar.tsx`
+  - `src/components/layout/AuthLayout.tsx`
+  - `src/components/brand/AgentProLogo.tsx`
+  - `src-tauri/tauri.conf.json`
+  - `src-tauri/icons/icon.png`
+  - `src-tauri/icons/icon.icns`
+  - `src-tauri/icons/icon.ico`
+  - `src/pages/workspace/LibraryPage.tsx`
+  - `src/services/agentSpecService.ts`
+  - `backend/app/modules/requirements/router.py`
+  - `backend/app/modules/requirements/schemas.py`
+  - `backend/tests/test_requirements.py`
+- 验证结果：
+  - 已通过 `npm run typecheck`
+  - 已通过 `npm run build`
+  - 已通过 `cd backend && uv run pytest tests/test_requirements.py`
+  - 已通过 `cd backend && uv run ruff check app tests/test_requirements.py`
+  - 已通过 `npm run tauri build`，构建产物包含 `Contents/Resources/icon.icns`
+
 ### 1. 项目初始化与基础依赖
 - 状态：已完成
 - 完成功能：

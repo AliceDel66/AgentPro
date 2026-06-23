@@ -1,5 +1,5 @@
 import { requirementLibraryRows } from "../lib/mockData";
-import { apiDelete, apiGet, apiPost, apiPostStream } from "./apiClient";
+import { apiDelete, apiGet, apiPost, apiPostStream, apiPut } from "./apiClient";
 import type { AgentRequirement, AgentSpecDraft, RequirementActionResult, RequirementDeleteResult, RequirementDetail } from "./types";
 
 const mockRequirements: AgentRequirement[] = requirementLibraryRows.map((row, index) => ({
@@ -117,6 +117,21 @@ export function confirmRequirementFollowups(requirementId: string, decisions: Ar
     messages: [],
     followupQuestions: [],
     decisions,
+    safetyReview: {}
+  } satisfies RequirementDetail);
+}
+
+export function renameRequirement(requirementId: string, title: string) {
+  return apiPut<{ title: string }, RequirementDetail>(`/requirements/${requirementId}`, { title }, {
+    id: requirementId,
+    title,
+    status: "interviewing",
+    maturity: 0,
+    route: "chat",
+    summary: "",
+    messages: [],
+    followupQuestions: [],
+    decisions: [],
     safetyReview: {}
   } satisfies RequirementDetail);
 }

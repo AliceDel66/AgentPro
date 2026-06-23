@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
-import { deleteRequirement, listRequirements, restoreRequirement, trashRequirement } from "../../services/agentSpecService";
+import { deleteRequirement, listRequirements, renameRequirement, restoreRequirement, trashRequirement } from "../../services/agentSpecService";
 import { nextActionForRequirement } from "../../lib/workflow";
 import type { AgentRequirement } from "../../services/types";
 import type { AppRoute, Navigate } from "../../types";
@@ -49,6 +49,7 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
 
 // Statuses that still need the user to act (answer / generate / approve).
 const TODO_STATUSES = ["interviewing", "ready_for_spec", "spec_draft"];
+let cachedRequirements: AgentRequirement[] | null = null;
 
 function matchesFilter(status: string, key: FilterKey): boolean {
   switch (key) {
@@ -74,8 +75,8 @@ export function LibraryPage({
   setActiveReviewId,
   setActiveReviewTab
 }: LibraryPageProps) {
-  const [requirements, setRequirements] = useState<AgentRequirement[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [requirements, setRequirements] = useState<AgentRequirement[]>(cachedRequirements ?? []);
+  const [loading, setLoading] = useState(!cachedRequirements);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -110,17 +111,19 @@ export function LibraryPage({
   );
 
   function updateRequirementStatus(requirementId: string, status: string) {
-    setRequirements((current) =>
-      current.map((row) =>
+    setRequirements((current) => {
+      const next = current.map((row) =>
         row.id === requirementId
           ? {
               ...row,
               status,
-              route: status === "trashed" ? "library" : "chat"
+              route: status === "trashed" ? ("library" as const) : ("chat" as const)
             }
           : row
-      )
-    );
+      );
+      cachedRequirements = next;
+      return next;
+    });
   }
 
   function syncWorkflowContext(row: AgentRequirement) {
@@ -155,6 +158,25 @@ export function LibraryPage({
     }
   }
 
+  async function handleRename(row: AgentRequirement) {
+    const nextTitle = window.prompt("重命名需求", row.title)?.trim();
+    if (!nextTitle || nextTitle === row.title) return;
+    setActionId(row.id);
+    setErrorMessage(null);
+    try {
+      const result = await renameRequirement(row.id, nextTitle);
+      setRequirements((current) => {
+        const next = current.map((item) => (item.id === row.id ? { ...item, title: result.data.title } : item));
+        cachedRequirements = next;
+        return next;
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "重命名失败");
+    } finally {
+      setActionId(null);
+    }
+  }
+
   async function handleRestore(row: AgentRequirement) {
     setActionId(row.id);
     setErrorMessage(null);
@@ -174,7 +196,11 @@ export function LibraryPage({
     setErrorMessage(null);
     try {
       await deleteRequirement(row.id);
-      setRequirements((current) => current.filter((item) => item.id !== row.id));
+      setRequirements((current) => {
+        const next = current.filter((item) => item.id !== row.id);
+        cachedRequirements = next;
+        return next;
+      });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "永久删除失败");
     } finally {
@@ -185,10 +211,11 @@ export function LibraryPage({
   useEffect(() => {
     let cancelled = false;
     async function loadRequirements() {
-      setLoading(true);
+      setLoading(!cachedRequirements);
       setErrorMessage(null);
       try {
         const result = await listRequirements({ includeTrash: true });
+        cachedRequirements = result.data;
         if (!cancelled) setRequirements(result.data);
       } catch (error) {
         const message = error instanceof Error ? error.message : "读取需求库失败";
@@ -260,7 +287,7 @@ export function LibraryPage({
             </span>
           ))}
         </div>
-        {loading ? <LoadingState className="px-6 py-8" label="正在读取需求库..." /> : null}
+        {loading && !requirements.length ? <LoadingState className="px-6 py-8" label="正在读取需求库..." /> : null}
         {!loading && !requirements.length ? <div className="px-6 py-8 text-sm text-agent-muted">暂无需求，点击“新建需求”开始。</div> : null}
         {!loading && requirements.length > 0 && !filtered.length ? (
           <div className="px-6 py-8 text-sm text-agent-muted">该筛选下暂无需求。</div>
@@ -273,7 +300,7 @@ export function LibraryPage({
           const openRow = () => {
             if (isTrashed) return;
             syncWorkflowContext(row);
-            navigate(row.workflowStatus && row.workflowStatus !== row.status ? meta.route : row.route ?? meta.route);
+            navigate("chat");
           };
           return (
             <div
@@ -325,10 +352,19 @@ export function LibraryPage({
                       type="button"
                       onClick={() => {
                         syncWorkflowContext(row);
-                        navigate(next.route);
+                        navigate("chat");
                       }}
                     >
                       {next.label}
+                    </button>
+                    <button
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-agent-muted hover:bg-agent-pale hover:text-agent-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      title="重命名"
+                      disabled={busy}
+                      onClick={() => void handleRename(row)}
+                    >
+                      <Pencil size={15} strokeWidth={2.3} />
                     </button>
                     <button
                       className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-agent-muted hover:bg-red-50 hover:text-agent-danger disabled:cursor-not-allowed disabled:opacity-60"

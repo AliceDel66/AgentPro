@@ -53,8 +53,10 @@ export default function App() {
   const setActiveReviewTab = useWorkflowStore((state) => state.setActiveReviewTab);
 
   const status = useAuthStore((state) => state.status);
+  const user = useAuthStore((state) => state.user);
   const bootstrap = useAuthStore((state) => state.bootstrap);
-  const authenticated = status === "authenticated";
+  const authLoading = status === "idle" || status === "loading";
+  const authenticated = status === "authenticated" || Boolean(user && (status === "loading" || status === "error"));
   const workflowContext = { activeRequirementId, activeSpecId, activeJobId, activeJobStatus, activeReviewId };
 
   const guardedNavigate = (nextRoute: AppRoute) => {
@@ -139,6 +141,17 @@ export default function App() {
   }
 
   // Auth guard: unauthenticated users may only see the auth screens.
+  if (!authenticated && authLoading && !AUTH_ROUTES.includes(route)) {
+    return (
+      <div className="grid h-screen w-full place-items-center bg-agent-bg">
+        <div className="flex items-center gap-3 text-sm text-agent-muted">
+          <Spinner size={20} className="text-agent-primary" />
+          正在恢复登录状态...
+        </div>
+      </div>
+    );
+  }
+
   if (!authenticated && !AUTH_ROUTES.includes(route)) {
     return <LoginPage navigate={setRoute} />;
   }
@@ -152,7 +165,11 @@ export default function App() {
     <AppShell navigate={guardedNavigate} route={route}>
       <ErrorBoundary onReset={() => setRoute("library")}>
         {route === "chat" ? (
-          <ChatPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} setActiveRequirementId={setActiveRequirementId} />
+          <ChatPage
+            activeRequirementId={activeRequirementId}
+            navigate={guardedNavigate}
+            setActiveRequirementId={setActiveRequirementId}
+          />
         ) : route === "followup" ? (
           <FollowupPage activeRequirementId={activeRequirementId} navigate={guardedNavigate} />
         ) : route === "spec" ? (

@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
-import { Archive, Bell, Bot, BotMessageSquare, FileText, FolderOpen, Settings } from "lucide-react";
+import { Archive, Bell, Bot, BotMessageSquare, FolderOpen, Settings } from "lucide-react";
+import { AgentProLogo } from "../brand/AgentProLogo";
 import { getUserAvatarInitial, getUserDisplayName, useAuthStore } from "../../stores/authStore";
-import { WorkflowStepper } from "./WorkflowStepper";
 import type { AppRoute, Navigate } from "../../types";
 
 interface AppShellProps {
@@ -26,7 +26,6 @@ const pageTitles: Partial<Record<AppRoute, string>> = {
 
 const navItems = [
   { route: "chat" as const, label: "需求访谈", icon: BotMessageSquare, group: ["chat", "followup"] },
-  { route: "spec" as const, label: "需求草案", icon: FileText, group: ["spec"] },
   { route: "library" as const, label: "需求库", icon: FolderOpen, group: ["library"] },
   { divider: true },
   { route: "reports" as const, label: "报告档案", icon: Archive, group: ["reports", "review"] },
@@ -56,11 +55,11 @@ export function AppShell({ route, navigate, children }: AppShellProps) {
       <aside className="flex w-14 shrink-0 flex-col items-center border-r border-agent-divider bg-white py-3.5">
         <button
           aria-label="返回需求访谈"
-          className="mb-6 grid h-[34px] w-[34px] place-items-center rounded-[9px] bg-agent-primary text-[13px] font-extrabold text-white"
+          className="mb-6 grid h-[34px] w-[34px] place-items-center"
           type="button"
           onClick={() => navigate("chat")}
         >
-          A
+          <AgentProLogo size={34} />
         </button>
         <nav className="flex flex-col items-center gap-1">
           {navItems.map((item, index) => {
@@ -104,9 +103,7 @@ export function AppShell({ route, navigate, children }: AppShellProps) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-[50px] shrink-0 items-center justify-between gap-4 border-b border-agent-divider bg-white px-7">
           <span className="shrink-0 text-[15px] font-semibold text-agent-ink">{title}</span>
-          <div className="hidden min-w-0 flex-1 justify-center lg:flex">
-            <WorkflowStepper route={route} navigate={navigate} />
-          </div>
+          <div className="hidden min-w-0 flex-1 lg:block" />
           <div className="flex shrink-0 items-center gap-[18px]">
             <button className="relative text-agent-subtle hover:text-agent-primary" title="通知" type="button">
               <Bell size={18} />

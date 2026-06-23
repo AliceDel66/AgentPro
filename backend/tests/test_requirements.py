@@ -92,6 +92,14 @@ async def test_requirement_interview_flow(api_client: AsyncClient) -> None:
     assert list_response.status_code == 200
     assert list_response.json()["data"][0]["title"] == "电商售后客服 Agent"
 
+    rename_response = await api_client.put(
+        f"/api/v1/requirements/{requirement_id}",
+        headers=headers,
+        json={"title": "电商售后客服 Agent v2"},
+    )
+    assert rename_response.status_code == 200
+    assert rename_response.json()["data"]["title"] == "电商售后客服 Agent v2"
+
     spec_response = await api_client.post(
         f"/api/v1/requirements/{requirement_id}/spec/generate",
         headers=headers,

@@ -14,11 +14,14 @@ interface SettingsPageProps {
   navigate: Navigate;
 }
 
+let cachedModelConfig: ModelProviderConfig | null = null;
+let cachedDefaultWorkspaceRoot: string | null = null;
+
 export function SettingsPage({ navigate }: SettingsPageProps) {
-  const [modelConfig, setModelConfig] = useState<ModelProviderConfig | null>(null);
+  const [modelConfig, setModelConfig] = useState<ModelProviderConfig | null>(cachedModelConfig);
   const [modelError, setModelError] = useState<string | null>(null);
-  const [loadingModel, setLoadingModel] = useState(true);
-  const [defaultWorkspaceRoot, setDefaultWorkspaceRoot] = useState(FALLBACK_RUNNER_WORKSPACE_ROOT);
+  const [loadingModel, setLoadingModel] = useState(!cachedModelConfig);
+  const [defaultWorkspaceRoot, setDefaultWorkspaceRoot] = useState(cachedDefaultWorkspaceRoot ?? FALLBACK_RUNNER_WORKSPACE_ROOT);
   const [workspaceMessage, setWorkspaceMessage] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [selectingWorkspace, setSelectingWorkspace] = useState(false);
@@ -44,6 +47,7 @@ export function SettingsPage({ navigate }: SettingsPageProps) {
     async function loadDefaultWorkspaceRoot() {
       try {
         const root = await getDefaultRunnerWorkspaceRoot();
+        cachedDefaultWorkspaceRoot = root;
         if (!cancelled) setDefaultWorkspaceRoot(root);
       } catch {
         if (!cancelled) setDefaultWorkspaceRoot(FALLBACK_RUNNER_WORKSPACE_ROOT);
@@ -59,9 +63,10 @@ export function SettingsPage({ navigate }: SettingsPageProps) {
   useEffect(() => {
     let cancelled = false;
     async function loadModelConfig() {
-      setLoadingModel(true);
+      setLoadingModel(!cachedModelConfig);
       try {
         const result = await getModelConfig();
+        cachedModelConfig = result.data;
         if (!cancelled) setModelConfig(result.data);
       } catch (error) {
         const message = error instanceof Error ? error.message : "读取模型配置失败";

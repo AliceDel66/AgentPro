@@ -59,7 +59,12 @@ export const useAuthStore = create<AuthState>()(
       refreshCurrentUser: () => {
         if (currentUserRequest) return currentUserRequest;
 
-        set({ status: "loading", error: null });
+        const cachedUser = useAuthStore.getState().user;
+        if (!cachedUser) {
+          set({ status: "loading", error: null });
+        } else {
+          set({ status: "authenticated", error: null });
+        }
         currentUserRequest = getCurrentUser()
           .then((result) => {
             set({ user: result.data, status: "authenticated", error: null });

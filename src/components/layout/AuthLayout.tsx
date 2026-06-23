@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AgentProLogo } from "../brand/AgentProLogo";
 
 interface AuthLayoutProps {
   caption: ReactNode;
@@ -27,7 +28,12 @@ export function AuthLayout({ caption, children }: AuthLayoutProps) {
           <line x1="468" y1="270" x2="390" y2="468" stroke="#155EEF" strokeWidth="1" />
         </svg>
         <div className="relative z-10 text-center">
-          <div className="text-[44px] font-extrabold tracking-[-1.5px] text-white">
+          <div className="flex justify-center">
+            <div className="rounded-[18px] bg-white/8 p-3 shadow-[0_16px_48px_rgba(21,94,239,0.24)]">
+              <AgentProLogo size={58} />
+            </div>
+          </div>
+          <div className="mt-5 text-[44px] font-extrabold tracking-normal text-white">
             Agent<span className="text-[#4B8BF5]">Pro</span>
           </div>
           <div className="mt-4 max-w-[320px] text-[15px] leading-[1.7] text-white/45">{caption}</div>
@@ -37,4 +43,3 @@ export function AuthLayout({ caption, children }: AuthLayoutProps) {
     </div>
   );
 }
-

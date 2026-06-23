@@ -44,6 +44,7 @@ from app.modules.requirements.schemas import (
     RequirementListItem,
     RequirementMessageCreate,
     RequirementReviewSummary,
+    RequirementUpdate,
 )
 
 router = APIRouter(prefix="/requirements")
@@ -562,6 +563,35 @@ async def get_requirement(
 ):
     requirement = await get_owned_requirement(requirement_id, session, current_user)
     graph_state = await latest_graph_state(session, requirement)
+    return ok(await build_detail(session, requirement, graph_state))
+
+
+@router.put("/{requirement_id}")
+async def update_requirement(
+    requirement_id: str,
+    body: RequirementUpdate,
+    session: AsyncSession = db_session_dependency,
+    current_user: User = current_user_dependency,
+):
+    requirement = await get_owned_requirement(requirement_id, session, current_user)
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Title cannot be blank",
+        )
+    previous_title = requirement.title
+    requirement.title = title
+    await record_audit(
+        session,
+        user_id=current_user.id,
+        action="requirement.rename",
+        resource_type="requirement",
+        resource_id=requirement.id,
+        payload={"previousTitle": previous_title, "title": requirement.title},
+    )
+    graph_state = await latest_graph_state(session, requirement)
+    await session.commit()
     return ok(await build_detail(session, requirement, graph_state))
 
 

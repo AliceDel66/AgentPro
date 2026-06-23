@@ -18,10 +18,11 @@ interface ReportsPageProps {
 }
 
 type ReportAction = { type: "regenerate" | "optimize"; id: string } | null;
+let cachedReports: ReviewReport[] | null = null;
 
 export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setActiveReviewId, setActiveReviewTab }: ReportsPageProps) {
-  const [reports, setReports] = useState<ReviewReport[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [reports, setReports] = useState<ReviewReport[]>(cachedReports ?? []);
+  const [loading, setLoading] = useState(!cachedReports);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [action, setAction] = useState<ReportAction>(null);
 
@@ -31,10 +32,11 @@ export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setA
   );
 
   const loadReports = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent) setLoading(!cachedReports);
     setErrorMessage(null);
     try {
       const result = await listReviewReports();
+      cachedReports = result.data;
       setReports(result.data);
     } catch (error) {
       const message = error instanceof Error ? error.message : "读取报告档案失败";
@@ -72,7 +74,11 @@ export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setA
     setErrorMessage(null);
     try {
       const result = await regenerateReviewReport(report.id);
-      setReports((current) => [result.data, ...current.filter((item) => item.id !== result.data.id)]);
+      setReports((current) => {
+        const next = [result.data, ...current.filter((item) => item.id !== result.data.id)];
+        cachedReports = next;
+        return next;
+      });
       setActiveReviewId(result.data.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : "重新生成评审失败";
@@ -88,7 +94,11 @@ export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setA
     setErrorMessage(null);
     try {
       const result = await optimizeFromReviewReport(report.id);
-      setReports((current) => current.map((item) => (item.id === result.data.id ? result.data : item)));
+      setReports((current) => {
+        const next = current.map((item) => (item.id === result.data.id ? result.data : item));
+        cachedReports = next;
+        return next;
+      });
       if (result.data.optimizationJob) {
         setActiveJobId(result.data.optimizationJob.id);
         setActiveJobStatus(result.data.optimizationJob.status);
@@ -127,7 +137,7 @@ export function ReportsPage({ navigate, setActiveJobId, setActiveJobStatus, setA
         </div>
 
         {errorMessage ? <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
-        {loading ? <LoadingState className="rounded-xl border border-agent-border bg-white px-6 py-5" label="正在读取报告档案..." /> : null}
+        {loading && !reports.length ? <LoadingState className="rounded-xl border border-agent-border bg-white px-6 py-5" label="正在读取报告档案..." /> : null}
 
         {!loading && !reports.length ? (
           <div className="rounded-xl border border-dashed border-agent-border bg-white px-8 py-14 text-center">

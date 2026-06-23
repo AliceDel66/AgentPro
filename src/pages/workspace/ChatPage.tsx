@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Send, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bot, Send } from "lucide-react";
 import { RequirementSidebar } from "../../components/layout/RequirementSidebar";
 import { LoadingState } from "../../components/common/LoadingState";
 import { Spinner } from "../../components/common/Spinner";
 import { TypingIndicator } from "../../components/common/TypingIndicator";
 import { TypewriterText } from "../../components/common/Typewriter";
 import { FollowupQuestionCard } from "../../components/workflow/FollowupQuestionCard";
+import { InlineWorkflowPanel } from "../../components/workflow/InlineWorkflowPanel";
 import { confirmRequirementFollowups, getRequirementDetail, streamRequirementDraft, streamRequirementMessage } from "../../services/agentSpecService";
 import type { RequirementDetail } from "../../services/types";
 import type { Navigate } from "../../types";
@@ -15,6 +16,8 @@ interface ChatPageProps {
   navigate: Navigate;
   setActiveRequirementId: (requirementId: string | null) => void;
 }
+
+const cachedRequirementDetails = new Map<string, RequirementDetail>();
 
 function titleFromMessage(message: string) {
   const normalized = message.trim().replace(/\s+/g, " ");
@@ -29,16 +32,9 @@ function questionKey(question: Record<string, unknown>, index: number) {
   return String(question.key ?? `question_${index + 1}`);
 }
 
-function safetyRiskText(safetyReview: Record<string, unknown> | undefined) {
-  const risks = safetyReview?.risks;
-  if (Array.isArray(risks)) return risks.length ? risks.map(String).join("；") : "暂无明显高风险。";
-  if (typeof risks === "string" && risks.trim()) return risks;
-  return "高风险操作需要评估权限边界和人工审批。";
-}
-
 export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId }: ChatPageProps) {
   const [draft, setDraft] = useState("");
-  const [detail, setDetail] = useState<RequirementDetail | null>(null);
+  const [detail, setDetail] = useState<RequirementDetail | null>(activeRequirementId ? cachedRequirementDetails.get(activeRequirementId) ?? null : null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
@@ -61,6 +57,8 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
       return undefined;
     }
     const requirementId = activeRequirementId;
+    const cached = cachedRequirementDetails.get(requirementId);
+    if (cached) setDetail(cached);
     // Already holding this requirement (e.g. just created it via send) — skip the refetch,
     // otherwise it clobbers the in-flight typewriter animation with a loading flash.
     if (detail?.id === requirementId) {
@@ -71,10 +69,11 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     setAnswers({});
 
     async function loadRequirement() {
-      setLoading(true);
+      setLoading(!cached);
       setErrorMessage(null);
       try {
         const result = await getRequirementDetail(requirementId);
+        cachedRequirementDetails.set(requirementId, result.data);
         if (!cancelled) setDetail(result.data);
       } catch (error) {
         const message = error instanceof Error ? error.message : "读取需求失败";
@@ -91,8 +90,6 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
   }, [activeRequirementId, detail?.id]);
 
   const pendingQuestions = detail?.followupQuestions ?? [];
-  const maturity = detail?.maturity ?? 0;
-  const confirmedCount = useMemo(() => (detail?.decisions ?? []).filter((item) => item.confirmed).length, [detail]);
 
   // Keep the conversation pinned to the latest message while loading / thinking.
   useEffect(() => {
@@ -119,6 +116,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
             initialMessage: content
           }, handleToken);
       setDetail(result.data);
+      cachedRequirementDetails.set(result.data.id, result.data);
       setActiveRequirementId(result.data.id);
       setAnimateMessageId(null);
     } catch (error) {
@@ -146,6 +144,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     setErrorMessage(null);
     try {
       const result = await confirmRequirementFollowups(activeRequirementId, answeredDecisions);
+      cachedRequirementDetails.set(result.data.id, result.data);
       setDetail(result.data);
       const assistantMessages = result.data.messages.filter((message) => message.role === "assistant");
       setAnimateMessageId(assistantMessages[assistantMessages.length - 1]?.id ?? null);
@@ -164,7 +163,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
 
       <section className="flex min-w-0 flex-1 flex-col bg-agent-bg">
         <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-4 pt-7">
-          {loading ? <LoadingState label="正在读取需求..." /> : null}
+          {loading && !detail ? <LoadingState label="正在读取需求..." /> : null}
           {!detail && !loading ? (
             <div className="mx-auto mt-16 max-w-[560px] rounded-xl border border-agent-border bg-white p-7 text-center shadow-agent-sm">
               <div className="mb-2 text-lg font-bold text-agent-ink">从一个想法开始</div>
@@ -281,60 +280,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
         </div>
       </section>
 
-      <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-agent-divider bg-white">
-        <div className="border-b border-agent-divider px-5 py-[18px]">
-          <div className="text-sm font-semibold text-agent-ink">需求成熟度</div>
-          <div className="mt-0.5 text-xs text-agent-muted">当前需求的完整程度评估</div>
-        </div>
-        <div className="p-5">
-          <div className="mb-2.5 flex items-baseline justify-between">
-            <span className="text-[32px] font-bold text-agent-primary">{maturity}%</span>
-            <span className="text-xs text-agent-muted">{pendingQuestions.length ? "需要更多信息" : "可以生成草案"}</span>
-          </div>
-          <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-agent-divider">
-            <div className="h-full rounded-full bg-gradient-to-r from-agent-primary to-agent-cyan" style={{ width: `${maturity}%` }} />
-          </div>
-          <div className="grid gap-3.5">
-            <InfoBox tone="green" title={`已确认 (${confirmedCount})`}>
-              {detail?.summary || "发送需求后会自动整理摘要。"}
-            </InfoBox>
-            <InfoBox tone="orange" title={`待确认 (${pendingQuestions.length})`}>
-              {pendingQuestions.length ? pendingQuestions.map(questionText).join("；") : "暂无待确认问题。"}
-            </InfoBox>
-            <InfoBox tone="blue" title="系统建议">
-              {pendingQuestions.length ? "建议先回答反问，再生成 AgentSpec 草案。" : "需求信息已较完整，可以生成需求草案。"}
-            </InfoBox>
-            <InfoBox tone="red" title="风险提醒">
-              {safetyRiskText(detail?.safetyReview)}
-            </InfoBox>
-            <button
-              className="mt-1 inline-flex items-center justify-center gap-2 rounded-[10px] bg-agent-primary px-4 py-3 text-[13px] font-semibold text-white hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={!detail}
-              type="button"
-              onClick={() => navigate("spec")}
-            >
-              <Sparkles size={16} />
-              生成需求草案
-            </button>
-          </div>
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-function InfoBox({ tone, title, children }: { tone: "green" | "orange" | "blue" | "red"; title: string; children: React.ReactNode }) {
-  const toneClasses = {
-    green: "bg-[#ECFDF5] text-agent-success",
-    orange: "bg-[#FFF7ED] text-agent-warning",
-    blue: "bg-agent-pale text-agent-primary",
-    red: "bg-[#FEF2F2] text-agent-danger"
-  };
-
-  return (
-    <div className={`rounded-[10px] p-3.5 ${toneClasses[tone].split(" ")[0]}`}>
-      <div className={`mb-2 text-xs font-semibold ${toneClasses[tone].split(" ")[1]}`}>{title}</div>
-      <div className="line-clamp-6 text-xs leading-7 text-agent-secondary">{children}</div>
+      <InlineWorkflowPanel detail={detail} />
     </div>
   );
 }

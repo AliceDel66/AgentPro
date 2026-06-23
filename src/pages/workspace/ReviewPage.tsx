@@ -39,6 +39,14 @@ interface ReviewPageProps {
   setActiveReviewTab: (tab: ReviewTab) => void;
 }
 
+function reviewCacheKey(activeReviewId: string | null, activeJobId: string | null, activeSpecId: string | null) {
+  if (activeReviewId) return `review:${activeReviewId}`;
+  if (activeJobId || activeSpecId) return `latest:${activeJobId ?? "-"}:${activeSpecId ?? "-"}`;
+  return null;
+}
+
+const cachedReviewReports = new Map<string, ReviewReport | null>();
+
 const tabs: Array<{ key: ReviewTab; label: string; icon: typeof FileText }> = [
   { key: "overview", label: "总览", icon: FileText },
   { key: "details", label: "详细报告", icon: Search },
@@ -57,7 +65,8 @@ export function ReviewPage({
   setActiveReviewId,
   setActiveReviewTab
 }: ReviewPageProps) {
-  const [report, setReport] = useState<ReviewReport | null>(null);
+  const initialReviewKey = reviewCacheKey(activeReviewId, activeJobId, activeSpecId);
+  const [report, setReport] = useState<ReviewReport | null>(initialReviewKey ? cachedReviewReports.get(initialReviewKey) ?? null : null);
   const [loading, setLoading] = useState(false);
   const [action, setAction] = useState<"accept" | "rework" | "optimize" | null>(null);
   const [merging, setMerging] = useState(false);
@@ -69,13 +78,19 @@ export function ReviewPage({
 
   useEffect(() => {
     let cancelled = false;
+    const cacheKey = reviewCacheKey(activeReviewId, activeJobId, activeSpecId);
+
     async function loadReport() {
-      setLoading(true);
+      const cached = cacheKey ? cachedReviewReports.get(cacheKey) : undefined;
+      if (cached !== undefined) setReport(cached);
+      setLoading(cached === undefined);
       setErrorMessage(null);
       try {
         if (activeReviewId) {
           const result = await getReviewReport(activeReviewId);
           if (!cancelled) {
+            if (cacheKey) cachedReviewReports.set(cacheKey, result.data);
+            cachedReviewReports.set(`review:${result.data.id}`, result.data);
             setReport(result.data);
             setActiveReviewId(result.data.id);
           }
@@ -85,6 +100,8 @@ export function ReviewPage({
             specId: activeSpecId ?? undefined
           });
           if (!cancelled) {
+            if (cacheKey) cachedReviewReports.set(cacheKey, result.data);
+            if (result.data?.id) cachedReviewReports.set(`review:${result.data.id}`, result.data);
             setReport(result.data);
             if (result.data) setActiveReviewId(result.data.id);
           }
@@ -137,6 +154,9 @@ export function ReviewPage({
         specId: activeSpecId ?? undefined
       });
       setReport(result.data);
+      cachedReviewReports.set(`review:${result.data.id}`, result.data);
+      const cacheKey = reviewCacheKey(result.data.id, activeJobId, activeSpecId);
+      if (cacheKey) cachedReviewReports.set(cacheKey, result.data);
       setActiveReviewId(result.data.id);
       setActiveReviewTab("overview");
     } catch (error) {
@@ -168,7 +188,9 @@ export function ReviewPage({
     setErrorMessage(null);
     try {
       await requestReviewRework(report.id);
-      setReport({ ...report, status: "rework_requested" });
+      const next = { ...report, status: "rework_requested" };
+      cachedReviewReports.set(`review:${next.id}`, next);
+      setReport(next);
     } catch (error) {
       const message = error instanceof Error ? error.message : "要求返工失败";
       setErrorMessage(message);
@@ -183,11 +205,13 @@ export function ReviewPage({
     setErrorMessage(null);
     try {
       await mergeReviewStrengths(report.id);
-      setReport({
+      const next = {
         ...report,
         status: "merge_planned",
         summary: "已记录合并优点计划，请在开发调度中创建返工任务执行。"
-      });
+      };
+      cachedReviewReports.set(`review:${next.id}`, next);
+      setReport(next);
     } catch (error) {
       const message = error instanceof Error ? error.message : "合并优点失败";
       setErrorMessage(message);
@@ -204,6 +228,7 @@ export function ReviewPage({
     try {
       const result = await optimizeFromReviewReport(report.id);
       setReport(result.data);
+      cachedReviewReports.set(`review:${result.data.id}`, result.data);
       if (result.data.optimizationJob) {
         setActiveJobId(result.data.optimizationJob.id);
         setActiveJobStatus(result.data.optimizationJob.status);
@@ -236,6 +261,7 @@ export function ReviewPage({
     try {
       const result = await optimizeFromReviewReport(report.id);
       setReport(result.data);
+      cachedReviewReports.set(`review:${result.data.id}`, result.data);
       if (!result.data.optimizationJob) {
         setErrorMessage("后端未返回可执行的本机 Runner 任务。");
         return;
@@ -288,7 +314,7 @@ export function ReviewPage({
               {report ? <StatusChip tone={reviewTone(report.status)}>{reviewStatusLabel(report.status)}</StatusChip> : null}
             </div>
             <div className="text-[13px] leading-6 text-agent-muted">
-              {loading ? <LoadingState label="正在读取评审报告..." /> : report?.summary ?? "尚未生成评审报告"}
+              {loading && !report ? <LoadingState label="正在读取评审报告..." /> : report?.summary ?? "尚未生成评审报告"}
             </div>
           </div>
           <div className="flex flex-wrap justify-end gap-2.5">
