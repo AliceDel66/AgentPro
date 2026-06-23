@@ -10,6 +10,56 @@ const mockRequirements: AgentRequirement[] = requirementLibraryRows.map((row, in
   route: row.route
 }));
 
+const CONFIRM_RECONCILE_DELAYS_MS = [0, 1_200, 2_500];
+
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function decisionKey(decision: Record<string, unknown>) {
+  return String(decision.key ?? "").trim();
+}
+
+function isConfirmedDecision(decision: Record<string, unknown>) {
+  return decision.confirmed === true;
+}
+
+export function hasConfirmedFollowupDecisions(detail: RequirementDetail, decisions: Array<Record<string, unknown>>) {
+  const submittedKeys = decisions.map(decisionKey).filter(Boolean);
+  if (!submittedKeys.length) return false;
+  if (!detail.followupQuestions.length) return true;
+
+  const confirmedKeys = new Set(
+    detail.decisions
+      .filter(isConfirmedDecision)
+      .map(decisionKey)
+      .filter(Boolean)
+  );
+  return submittedKeys.every((key) => confirmedKeys.has(key));
+}
+
+export async function reconcileRequirementFollowupConfirmation(requirementId: string, decisions: Array<Record<string, unknown>>) {
+  let latestDetail: RequirementDetail | null = null;
+  let lastError: Error | null = null;
+
+  for (const delayMs of CONFIRM_RECONCILE_DELAYS_MS) {
+    if (delayMs) await wait(delayMs);
+    try {
+      const result = await getRequirementDetail(requirementId);
+      latestDetail = result.data;
+      if (hasConfirmedFollowupDecisions(latestDetail, decisions)) {
+        return { accepted: true, detail: latestDetail, error: null };
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("读取服务端确认状态失败");
+    }
+  }
+
+  return { accepted: false, detail: latestDetail, error: lastError };
+}
+
 export function listRequirements(options: { includeTrash?: boolean } = {}) {
   const query = options.includeTrash ? "?includeTrash=true" : "";
   return apiGet(`/requirements${query}`, mockRequirements);

@@ -3,7 +3,7 @@ import { Bot, Check, CircleAlert } from "lucide-react";
 import { RequirementSidebar } from "../../components/layout/RequirementSidebar";
 import { LoadingState } from "../../components/common/LoadingState";
 import { Spinner } from "../../components/common/Spinner";
-import { confirmRequirementFollowups, getRequirementDetail } from "../../services/agentSpecService";
+import { confirmRequirementFollowups, getRequirementDetail, reconcileRequirementFollowupConfirmation } from "../../services/agentSpecService";
 import type { RequirementDetail } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -72,22 +72,31 @@ export function FollowupPage({ activeRequirementId, navigate }: FollowupPageProp
 
   const handleConfirm = async () => {
     if (!activeRequirementId || saving) return;
+    const decisions = pendingQuestions.map((question, index) => {
+      const key = questionKey(question, index);
+      return {
+        key,
+        value: answers[key]?.trim() || "用户已确认",
+        confirmed: true
+      };
+    });
     setSaving(true);
     setErrorMessage(null);
     try {
-      const decisions = pendingQuestions.map((question, index) => {
-        const key = questionKey(question, index);
-        return {
-          key,
-          value: answers[key]?.trim() || "用户已确认",
-          confirmed: true
-        };
-      });
       await confirmRequirementFollowups(activeRequirementId, decisions);
       navigate("spec");
     } catch (error) {
       const message = error instanceof Error ? error.message : "保存确认项失败";
-      setErrorMessage(message);
+      const reconciled = await reconcileRequirementFollowupConfirmation(activeRequirementId, decisions);
+      if (reconciled.detail) {
+        cachedFollowupDetails.set(reconciled.detail.id, reconciled.detail);
+        setDetail(reconciled.detail);
+      }
+      if (reconciled.accepted) {
+        navigate("spec");
+      } else {
+        setErrorMessage(reconciled.detail ? `${message}；已刷新服务端状态，但确认尚未完成。` : `${message}；自动刷新服务端状态失败，请稍后重试。`);
+      }
     } finally {
       setSaving(false);
     }

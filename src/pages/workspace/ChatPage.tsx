@@ -8,7 +8,7 @@ import { TypewriterText } from "../../components/common/Typewriter";
 import { FollowupQuestionCard } from "../../components/workflow/FollowupQuestionCard";
 import { InlineWorkflowPanel } from "../../components/workflow/InlineWorkflowPanel";
 import { StatusChip } from "../../components/common/StatusChip";
-import { confirmRequirementFollowups, getRequirementDetail, streamRequirementDraft, streamRequirementMessage } from "../../services/agentSpecService";
+import { confirmRequirementFollowups, getRequirementDetail, reconcileRequirementFollowupConfirmation, streamRequirementDraft, streamRequirementMessage } from "../../services/agentSpecService";
 import type { RequirementDetail } from "../../services/types";
 import type { Navigate } from "../../types";
 
@@ -44,6 +44,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -55,6 +56,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     if (!activeRequirementId) {
       setDetail(null);
       setAnimateMessageId(null);
+      setNoticeMessage(null);
       return undefined;
     }
     const requirementId = activeRequirementId;
@@ -72,6 +74,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     async function loadRequirement() {
       setLoading(!cached);
       setErrorMessage(null);
+      setNoticeMessage(null);
       try {
         const result = await getRequirementDetail(requirementId);
         cachedRequirementDetails.set(requirementId, result.data);
@@ -108,6 +111,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
     setStreamingText("");
     setDraft("");
     setErrorMessage(null);
+    setNoticeMessage(null);
     try {
       const handleToken = (token: string) => {
         setStreamingText((current) => `${current}${token}`);
@@ -143,10 +147,12 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
 
   const handleConfirmFollowups = async () => {
     if (!activeRequirementId || confirming || !answeredDecisions.length) return;
+    const submittedDecisions = answeredDecisions;
     setConfirming(true);
     setErrorMessage(null);
+    setNoticeMessage(null);
     try {
-      const result = await confirmRequirementFollowups(activeRequirementId, answeredDecisions);
+      const result = await confirmRequirementFollowups(activeRequirementId, submittedDecisions);
       cachedRequirementDetails.set(result.data.id, result.data);
       setDetail(result.data);
       const assistantMessages = result.data.messages.filter((message) => message.role === "assistant");
@@ -154,7 +160,19 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
       setAnswers({});
     } catch (error) {
       const message = error instanceof Error ? error.message : "提交回答失败";
-      setErrorMessage(message);
+      const reconciled = await reconcileRequirementFollowupConfirmation(activeRequirementId, submittedDecisions);
+      if (reconciled.detail) {
+        cachedRequirementDetails.set(reconciled.detail.id, reconciled.detail);
+        setDetail(reconciled.detail);
+        const assistantMessages = reconciled.detail.messages.filter((item) => item.role === "assistant");
+        setAnimateMessageId(assistantMessages[assistantMessages.length - 1]?.id ?? null);
+      }
+      if (reconciled.accepted && reconciled.detail) {
+        setAnswers({});
+        setNoticeMessage("提交请求超时，但服务端已完成确认，已同步最新状态。");
+      } else {
+        setErrorMessage(reconciled.detail ? `${message}；已刷新服务端状态，但确认尚未完成。` : `${message}；自动刷新服务端状态失败，请稍后重试。`);
+      }
     } finally {
       setConfirming(false);
     }
@@ -250,6 +268,7 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
                 </div>
               </div>
             ) : null}
+            {noticeMessage ? <div className="rounded-lg bg-[#ECFDF5] px-3 py-2 text-xs font-medium text-agent-success">{noticeMessage}</div> : null}
             {errorMessage ? <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
             {detail ? <InlineWorkflowPanel detail={detail} /> : null}
             <div ref={bottomRef} />

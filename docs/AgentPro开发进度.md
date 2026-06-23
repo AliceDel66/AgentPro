@@ -16,6 +16,28 @@
 
 ## 进度记录
 
+### 2026-06-23 反问确认 timeout 后状态自动同步
+- 状态：已完成
+- 完成功能：
+  - 新增反问确认状态 reconcile helper：确认请求失败或超时时，短时间内自动重新读取当前需求详情
+  - 对话页 `提交回答` 失败后会用提交的 decision key 判断服务端是否已经完成确认；若已完成，则清空回答、同步最新需求状态并显示绿色提示，不再停留在旧错误态
+  - 旧 `FollowupPage` 确认入口复用同一 reconcile 逻辑；若服务端已完成确认，自动进入 AgentSpec 步骤
+  - 保留真实错误提示：若自动刷新后仍未确认完成，显示“已刷新服务端状态，但确认尚未完成”；若刷新失败，提示稍后重试
+  - 该 slice 仅改桌面端前端与文档，不触发后端容器部署；需要重新打包并覆盖安装桌面端
+- 相关文件：
+  - `src/services/agentSpecService.ts`
+  - `src/pages/workspace/ChatPage.tsx`
+  - `src/pages/workspace/FollowupPage.tsx`
+  - `docs/AgentPro开发进度.md`
+- 验证结果：
+  - 已通过 `npm run typecheck`
+  - 已通过 `npm run build`
+  - 已通过 `npm run tauri -- build --bundles app,dmg`
+  - 已覆盖安装 `/Applications/AgentPro.app` 并启动新版桌面端
+  - 已确认当前运行进程来自 `/Applications/AgentPro.app/Contents/MacOS/agentpro`
+  - 已通过远端 `https://api.zgonline.top/agentpro/api/v1/health` 健康检查
+  - 已确认本机 `127.0.0.1:8000` 无监听，桌面端没有依赖本地后端
+
 ### 2026-06-23 反问确认接口 AI 超时兜底修复
 - 状态：已完成
 - 完成功能：
