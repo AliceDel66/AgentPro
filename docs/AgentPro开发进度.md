@@ -16,6 +16,35 @@
 
 ## 进度记录
 
+### 2026-06-23 桌面端远端托管后端默认入口修复
+- 状态：已完成
+- 完成功能：
+  - 桌面端生产构建不再依赖打包环境变量注入后端地址；未设置 `VITE_AGENTPRO_SERVER_URL` 时默认请求 `https://api.zgonline.top/agentpro/api/v1`
+  - 保留 `VITE_AGENTPRO_SERVER_URL` 作为灰度或临时切换入口；开发环境继续使用 `/api/v1` 走 Vite 本机代理
+  - 启动契约拦截页新增当前 API 入口展示，后端不可达、请求超时和版本不匹配提示统一改为远端托管后端语义
+  - 更新后端部署文档，明确包含后端代码、迁移、Docker、部署脚本或契约变更的 slice 必须推送 `feature/agentpro-backend` 触发 GitHub Actions 自动部署
+  - 移除本机临时 `com.agentpro.backend.local` LaunchAgent，避免桌面端 smoke 被本机 `127.0.0.1:8000` 服务掩盖；正式桌面包只以远端 HTTPS health 为准
+  - 重新生成 macOS `.app` 和 `.dmg`，并覆盖安装 `/Applications/AgentPro.app`
+- 相关文件：
+  - `src/services/apiClient.ts`
+  - `src/services/healthService.ts`
+  - `src/components/common/BackendContractGate.tsx`
+  - `src/App.tsx`
+  - `src/pages/setup/SetupPage.tsx`
+  - `src/pages/auth/ForgotPasswordPage.tsx`
+  - `src/pages/auth/RegisterPage.tsx`
+  - `docs/AgentPro后端部署.md`
+  - `docs/AgentPro开发进度.md`
+- 验证结果：
+  - 已通过 `npm run typecheck`
+  - 已通过 `npm run build`
+  - 已通过 `npm run tauri -- build --bundles app,dmg`
+  - 已通过 `git diff --check`
+  - 已确认 `dist` 生产产物包含 `https://api.zgonline.top/agentpro/api/v1`，不包含本机或公网 `:8000` API 地址
+  - 已通过 `curl https://api.zgonline.top/agentpro/api/v1/health`，返回 `ok: true`、`contractVersion: 2`、`minDesktopContractVersion: 2`
+  - 已确认本机 `127.0.0.1:8000` 无监听且本地 LaunchAgent plist 已移除
+  - 已启动新安装的 `/Applications/AgentPro.app`
+
 ### 2026-06-23 访谈页纯对话工作流、登录闪屏与需求管理修复
 - 状态：已完成
 - 完成功能：

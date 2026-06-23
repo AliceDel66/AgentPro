@@ -38,12 +38,14 @@ location /agentpro/api/v1/ {
 }
 ```
 
-本地桌面端打包环境：
+桌面端生产包默认使用该远端托管入口；如需灰度或临时切换 API，可在打包时覆盖：
 
 ```bash
 VITE_AGENTPRO_SERVER_URL=https://api.zgonline.top/agentpro/api/v1
 VITE_AGENTPRO_MOCK_API=false
 ```
+
+不设置 `VITE_AGENTPRO_SERVER_URL` 时，生产构建仍会默认请求 `https://api.zgonline.top/agentpro/api/v1`；开发环境继续使用 `/api/v1` 并由 Vite 代理到本机 `127.0.0.1:8000`。
 
 Tauri 打包后 WebView 还需要在 `src-tauri/tauri.conf.json` 的 CSP 中允许 `connect-src https://api.zgonline.top`。
 
@@ -129,6 +131,11 @@ COPYFILE_DISABLE=1 tar --no-xattrs \
 推送到 `feature/agentpro-backend` 且改动 `backend/**` 时，GitHub Actions 自动 SSH 到服务器
 更新后端容器。链路：`.github/workflows/deploy-backend.yml` → 服务器 `git reset --hard` →
 `backend/scripts/deploy-remote.sh`（构建 → `alembic upgrade head` → `up -d` → 健康检查 → **失败自动回滚**）。
+
+执行约定：
+- 每个包含后端代码、迁移、Docker、部署脚本或后端契约的 slice，完成本地测试后必须推送到 `feature/agentpro-backend`，让 GitHub Actions 自动更新服务器后端。
+- 纯前端 slice 不触发后端容器重启；但发布桌面端前仍必须验证 `https://api.zgonline.top/agentpro/api/v1/health` 和桌面端启动契约检查。
+- 若自动部署失败，不继续发布桌面端；先修复服务器部署或回滚后端，再重新打包桌面端。
 
 关键不变量：
 - 部署脚本只构建/迁移/重启，**绝不执行 `git clean`**，以保留未跟踪的 `backend/.env`（生产配置不在 Git 中）。

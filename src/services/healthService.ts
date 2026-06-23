@@ -40,7 +40,7 @@ export function evaluateBackendContract(health: HealthPayload | null): BackendCo
     return {
       compatible: false,
       title: "无法读取后端版本",
-      message: "桌面端没有拿到后端健康检查结果，请确认当前代码对应的后端服务已启动。",
+      message: "桌面端没有拿到远端托管后端的健康检查结果，请确认网络可用并且服务器部署正常。",
       issues: [{ code: "health_missing", message: "GET /api/v1/health 未返回有效数据。" }],
       health
     };
@@ -54,7 +54,7 @@ export function evaluateBackendContract(health: HealthPayload | null): BackendCo
   if (!hasContractNumber(contractVersion)) {
     issues.push({
       code: "contract_version_missing",
-      message: "后端缺少 contractVersion，通常表示当前运行的是旧后端进程。"
+      message: "远端后端缺少 contractVersion，通常表示服务器仍在运行旧版本后端。"
     });
   } else if (contractVersion < DESKTOP_CONTRACT_VERSION) {
     issues.push({
@@ -82,7 +82,7 @@ export function evaluateBackendContract(health: HealthPayload | null): BackendCo
     return {
       compatible: false,
       title: "后端与桌面端版本不一致",
-      message: "请重启当前代码对应的后端服务，或重新打包桌面端后再登录。为避免工作区白屏，AgentPro 已暂停进入应用。",
+      message: "请先完成远端后端自动部署，或重新打包桌面端后再登录。为避免工作区白屏，AgentPro 已暂停进入应用。",
       issues,
       health
     };

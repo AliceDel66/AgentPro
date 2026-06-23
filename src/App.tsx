@@ -83,17 +83,17 @@ export default function App() {
       });
       setBooted(true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "无法连接后端服务，请确认后端 API 已启动并检查网络后重试。";
+      const message = error instanceof Error ? error.message : "无法连接远端后端服务，请确认服务器健康状态和当前网络后重试。";
       setContractState({
         status: "blocked",
         check: {
           compatible: false,
-          title: "无法连接后端服务",
+          title: "无法连接远端后端服务",
           message,
           issues: [
             {
               code: "backend_unreachable",
-              message: "桌面端无法读取 /api/v1/health，请先启动或重启当前代码对应的后端服务。"
+              message: "桌面端无法读取远端 /api/v1/health，请确认服务器部署正常、网络可达，或等待自动部署完成后重试。"
             }
           ],
           health: null

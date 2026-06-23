@@ -18,7 +18,7 @@ const authErrorMessages: Record<string, string> = {
   "Email already registered": "该邮箱已注册，请直接登录",
   "Invalid email code": "邮箱验证码不正确或已过期",
   "Request failed: 500": "服务暂时不可用，请稍后重试",
-  "Failed to fetch": "无法连接后端服务，请确认 API 服务已启动"
+  "Failed to fetch": "无法连接远端后端服务，请确认服务器健康状态和当前网络"
 };
 
 function getFriendlyError(message: string) {

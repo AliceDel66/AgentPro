@@ -15,7 +15,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const errorMessages: Record<string, string> = {
   "Code cooldown active": "验证码发送太频繁，请稍后再试",
   "Invalid email code": "邮箱验证码不正确或已过期",
-  "Failed to fetch": "无法连接后端服务，请确认 API 服务已启动"
+  "Failed to fetch": "无法连接远端后端服务，请确认服务器健康状态和当前网络"
 };
 
 function friendlyError(message: string) {

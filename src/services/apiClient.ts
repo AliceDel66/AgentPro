@@ -1,15 +1,19 @@
 import type { ApiResult, AuthSession } from "./types";
 
+export const REMOTE_AGENTPRO_API_BASE_URL = "https://api.zgonline.top/agentpro/api/v1";
+
 const serverBaseUrl = import.meta.env.VITE_AGENTPRO_SERVER_URL?.trim() ?? "";
 const mockApiRequested = import.meta.env.VITE_AGENTPRO_MOCK_API === "true";
 // Mock mode is dev-only: production builds always hit the real backend, even if the flag leaks.
 const useMockApi = mockApiRequested && import.meta.env.DEV;
 const normalizedServerUrl = serverBaseUrl.replace(/\/$/, "");
-const apiBaseUrl = normalizedServerUrl
+const configuredApiBaseUrl = normalizedServerUrl
   ? normalizedServerUrl.endsWith("/api/v1")
     ? normalizedServerUrl
     : `${normalizedServerUrl}/api/v1`
-  : "/api/v1";
+  : null;
+
+export const API_BASE_URL = configuredApiBaseUrl ?? (import.meta.env.PROD ? REMOTE_AGENTPRO_API_BASE_URL : "/api/v1");
 
 if (useMockApi) {
   console.warn("[AgentPro] Mock API 已开启：所有请求返回本地假数据，请勿用于真实联调或生产。");
@@ -42,8 +46,8 @@ function clearStoredTokens(): void {
   globalThis.localStorage?.removeItem(REFRESH_TOKEN_KEY);
 }
 
-const NETWORK_ERROR_MESSAGE = "无法连接后端服务，请确认后端 API 已启动并检查网络后重试。";
-const TIMEOUT_ERROR_MESSAGE = "请求超时，请检查后端服务或网络后重试。";
+const NETWORK_ERROR_MESSAGE = "无法连接远端后端服务，请确认服务器健康状态和当前网络后重试。";
+const TIMEOUT_ERROR_MESSAGE = "请求超时，请检查远端后端服务或网络后重试。";
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 // fetch() throws a bare TypeError on network-level failure — "Load failed" in the Tauri/WebKit
@@ -54,12 +58,12 @@ async function safeFetch(path: string, init: RequestInit, timeoutMs = DEFAULT_TI
   const controller = timeoutMs > 0 ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    return await fetch(`${apiBaseUrl}${path}`, { ...init, signal: controller?.signal });
+    return await fetch(`${API_BASE_URL}${path}`, { ...init, signal: controller?.signal });
   } catch (error) {
     if (controller?.signal.aborted) {
       throw new Error(TIMEOUT_ERROR_MESSAGE);
     }
-    console.error("[AgentPro] 请求后端失败", `${apiBaseUrl}${path}`, error);
+    console.error("[AgentPro] 请求后端失败", `${API_BASE_URL}${path}`, error);
     throw new Error(NETWORK_ERROR_MESSAGE);
   } finally {
     if (timer) clearTimeout(timer);
@@ -72,7 +76,7 @@ async function refreshAccessToken(): Promise<boolean> {
   const refreshToken = globalThis.localStorage?.getItem(REFRESH_TOKEN_KEY);
   if (!refreshToken) return false;
   try {
-    const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken })

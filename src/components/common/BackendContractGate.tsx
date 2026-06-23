@@ -1,6 +1,7 @@
 import { AlertTriangle, RefreshCw, Server } from "lucide-react";
 import { AppButton } from "./Button";
 import { Spinner } from "./Spinner";
+import { API_BASE_URL } from "../../services/apiClient";
 import { DESKTOP_CONTRACT_VERSION, type BackendContractCheck } from "../../services/healthService";
 
 interface BackendContractGateProps {
@@ -27,7 +28,7 @@ export function BackendContractGate({ checking = false, check, onRetry }: Backen
             <p className="mt-3 text-[14px] leading-7 text-agent-muted">
               {checking
                 ? "AgentPro 会先确认后端契约版本和必要能力集，确认通过后再恢复登录状态。"
-                : check?.message ?? "请确认后端服务已启动并与当前桌面端版本匹配。"}
+                : check?.message ?? "请确认远端托管后端可达并与当前桌面端版本匹配。"}
             </p>
           </div>
         </div>
@@ -42,6 +43,7 @@ export function BackendContractGate({ checking = false, check, onRetry }: Backen
                 label="最低桌面端"
                 value={typeof health?.minDesktopContractVersion === "number" ? `v${health.minDesktopContractVersion}` : "未声明"}
               />
+              <InfoLine label="API 入口" value={API_BASE_URL} />
             </div>
 
             {check?.issues.length ? (
@@ -62,7 +64,7 @@ export function BackendContractGate({ checking = false, check, onRetry }: Backen
 
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[12px] leading-6 text-agent-muted">
-                常见原因：后端代码已更新但本地 FastAPI 进程还没重启，或桌面端仍是旧打包版本。
+                常见原因：远端部署还没完成、服务器健康检查失败、网络不可达，或桌面端仍是旧打包版本。
               </p>
               <AppButton type="button" onClick={onRetry} className="px-4 py-2.5">
                 <RefreshCw size={16} />

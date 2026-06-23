@@ -64,7 +64,7 @@ function friendlyModelError(message: string) {
     return "登录状态已失效，请返回登录后重试";
   }
   if (message === "Failed to fetch") {
-    return "无法连接后端服务，请确认 API 服务已启动";
+    return "无法连接远端后端服务，请确认服务器健康状态和当前网络";
   }
   return message;
 }
