@@ -1054,6 +1054,7 @@
   - 桌面 Runner 执行命令新增默认 30 分钟超时，超时后终止子进程并返回 `exitCode=124`
   - 桌面端新增任务取消能力，监控页可对运行中的本机 Runner 发起取消，并以 lease-bound event 写回任务状态
   - 前端 Runner 心跳、事件、artifact 和评审触发均绑定当前 lease，取消后的任务不再自动创建 review
+  - 补充本机取消 smoke：注册真实子进程到 Tauri Runner 表，调用 `cancel_agent_runner` 发送 TERM，并校验进程退出
 - 相关文件：
   - backend/app/db/models.py
   - backend/app/modules/runner/router.py
@@ -1078,6 +1079,7 @@
   - 已通过 git diff --check
   - 已通过 uv lock --check
   - 已通过 npm ci --dry-run --ignore-scripts
+  - 已通过本地临时 backend + lease-bound `desktop.runner.cancel` smoke，任务最终状态为 `blocked`
 - Commit：
   - 哈希：本提交
   - 信息：完成桌面 Runner 超时取消与 lease 证据协议

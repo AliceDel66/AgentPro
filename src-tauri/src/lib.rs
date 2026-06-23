@@ -664,7 +664,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{trim_output, wait_with_timeout};
+    use super::{
+        cancel_agent_runner, register_active_runner, trim_output, unregister_active_runner,
+        wait_with_timeout,
+    };
     use std::process::{Command, Stdio};
     use std::time::Duration;
 
@@ -697,5 +700,26 @@ mod tests {
         let (_output, timed_out) =
             wait_with_timeout(child, Duration::from_millis(10)).expect("wait with timeout");
         assert!(timed_out);
+    }
+
+    #[test]
+    fn cancel_agent_runner_terminates_registered_process() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("trap 'exit 143' TERM; sleep 30")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn cancellable process");
+
+        register_active_runner("job-smoke-cancel", "codex", child.id()).expect("register runner");
+        let result = cancel_agent_runner("job-smoke-cancel".to_string(), "codex".to_string())
+            .expect("cancel runner");
+        assert!(result.cancelled);
+        assert_eq!(result.pid, Some(child.id()));
+
+        let (_, timed_out) = wait_with_timeout(child, Duration::from_secs(3)).expect("wait child");
+        unregister_active_runner("job-smoke-cancel", "codex");
+        assert!(!timed_out);
     }
 }
