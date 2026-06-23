@@ -110,7 +110,7 @@ export default function App() {
   // Once restored, land an authenticated user in the workspace rather than the login page.
   useEffect(() => {
     if (booted && authenticated && route === "login") {
-      setRoute("library");
+      setRoute("chat");
     }
   }, [booted, authenticated, route]);
 
@@ -163,7 +163,7 @@ export default function App() {
 
   return (
     <AppShell navigate={guardedNavigate} route={route}>
-      <ErrorBoundary onReset={() => setRoute("library")}>
+      <ErrorBoundary onReset={() => setRoute("chat")}>
         {route === "chat" ? (
           <ChatPage
             activeRequirementId={activeRequirementId}

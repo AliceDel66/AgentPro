@@ -163,94 +163,97 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
 
       <section className="flex min-w-0 flex-1 flex-col bg-agent-bg">
         <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-4 pt-7">
-          {loading && !detail ? <LoadingState label="正在读取需求..." /> : null}
-          {!detail && !loading ? (
-            <div className="mx-auto mt-16 max-w-[560px] rounded-xl border border-agent-border bg-white p-7 text-center shadow-agent-sm">
-              <div className="mb-2 text-lg font-bold text-agent-ink">从一个想法开始</div>
-              <div className="text-sm leading-7 text-agent-muted">描述你想做的 Agent，系统会创建真实需求记录并生成需要确认的问题。</div>
-            </div>
-          ) : null}
-          {detail?.messages.map((message) =>
-            message.role === "user" ? (
-              <div className="mb-6 flex justify-end" key={message.id}>
-                <div className="max-w-[500px] rounded-[16px_16px_4px_16px] bg-agent-primary px-5 py-4 text-sm leading-7 text-white">{message.content}</div>
+          <div className="mx-auto max-w-[760px]">
+            {loading && !detail ? <LoadingState label="正在读取需求..." /> : null}
+            {!detail && !loading ? (
+              <div className="mx-auto mt-16 max-w-[560px] rounded-xl border border-agent-border bg-white p-7 text-center shadow-agent-sm">
+                <div className="mb-2 text-lg font-bold text-agent-ink">从一个想法开始</div>
+                <div className="text-sm leading-7 text-agent-muted">描述你想做的 Agent，系统会创建真实需求记录并生成需要确认的问题。</div>
               </div>
-            ) : (
-              <div className="mb-5 flex gap-3" key={message.id}>
+            ) : null}
+            {detail?.messages.map((message) =>
+              message.role === "user" ? (
+                <div className="mb-6 flex justify-end" key={message.id}>
+                  <div className="max-w-[500px] rounded-[16px_16px_4px_16px] bg-agent-primary px-5 py-4 text-sm leading-7 text-white">{message.content}</div>
+                </div>
+              ) : (
+                <div className="mb-5 flex gap-3" key={message.id}>
+                  <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-agent-ink text-agent-cyan">
+                    <Bot size={17} />
+                  </div>
+                  <div className="max-w-[560px] whitespace-pre-line rounded-[4px_16px_16px_16px] border border-agent-border bg-white p-5 text-sm leading-8 text-agent-secondary shadow-[0_1px_4px_rgba(11,18,32,0.04)]">
+                    <TypewriterText text={message.content} enabled={message.id === animateMessageId} onUpdate={scrollToBottom} />
+                  </div>
+                </div>
+              )
+            )}
+            {sending && pendingMessage ? (
+              <div className="mb-6 flex justify-end">
+                <div className="max-w-[500px] rounded-[16px_16px_4px_16px] bg-agent-primary px-5 py-4 text-sm leading-7 text-white">{pendingMessage}</div>
+              </div>
+            ) : null}
+            {sending ? (
+              <div className="mb-5 flex gap-3 animate-agent-fade-in">
                 <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-agent-ink text-agent-cyan">
                   <Bot size={17} />
                 </div>
-                <div className="max-w-[560px] whitespace-pre-line rounded-[4px_16px_16px_16px] border border-agent-border bg-white p-5 text-sm leading-8 text-agent-secondary shadow-[0_1px_4px_rgba(11,18,32,0.04)]">
-                  <TypewriterText text={message.content} enabled={message.id === animateMessageId} onUpdate={scrollToBottom} />
+                <div className="max-w-[560px] whitespace-pre-line rounded-[4px_16px_16px_16px] border border-agent-border bg-white px-5 py-4 text-sm leading-8 text-agent-secondary shadow-[0_1px_4px_rgba(11,18,32,0.04)]">
+                  {streamingText ? (
+                    <>
+                      {streamingText}
+                      <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-agent-caret bg-agent-primary align-middle" />
+                    </>
+                  ) : (
+                    <TypingIndicator label="正在思考" />
+                  )}
                 </div>
               </div>
-            )
-          )}
-          {sending && pendingMessage ? (
-            <div className="mb-6 flex justify-end">
-              <div className="max-w-[500px] rounded-[16px_16px_4px_16px] bg-agent-primary px-5 py-4 text-sm leading-7 text-white">{pendingMessage}</div>
-            </div>
-          ) : null}
-          {sending ? (
-            <div className="mb-5 flex gap-3 animate-agent-fade-in">
-              <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-agent-ink text-agent-cyan">
-                <Bot size={17} />
+            ) : null}
+            {detail && !sending && pendingQuestions.length ? (
+              <div className="mb-5 ml-[46px] max-w-[560px] rounded-[12px] bg-[#F0F7FF] p-[18px]">
+                <div className="mb-3 text-xs font-semibold tracking-[0.5px] text-agent-primary">
+                  还需要确认（可直接在对话里回答）
+                </div>
+                <div className="grid gap-2.5">
+                  {pendingQuestions.map((question, index) => {
+                    const key = questionKey(question, index);
+                    return (
+                      <FollowupQuestionCard
+                        key={key}
+                        index={index}
+                        question={questionText(question)}
+                        reason={question.reason ? String(question.reason) : undefined}
+                        value={answers[key] ?? ""}
+                        disabled={confirming}
+                        onChange={(value) => setAnswers((current) => ({ ...current, [key]: value }))}
+                        onMarkNA={() => setAnswers((current) => ({ ...current, [key]: "不适用" }))}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-xs text-agent-muted">已填写 {answeredDecisions.length}/{pendingQuestions.length}</span>
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-agent-primary px-4 py-2 text-[13px] font-semibold text-white hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    disabled={confirming || !answeredDecisions.length}
+                    aria-busy={confirming}
+                    onClick={() => void handleConfirmFollowups()}
+                  >
+                    {confirming ? <Spinner size={14} className="text-white" /> : null}
+                    {confirming ? "提交中..." : "提交回答"}
+                  </button>
+                </div>
               </div>
-              <div className="max-w-[560px] whitespace-pre-line rounded-[4px_16px_16px_16px] border border-agent-border bg-white px-5 py-4 text-sm leading-8 text-agent-secondary shadow-[0_1px_4px_rgba(11,18,32,0.04)]">
-                {streamingText ? (
-                  <>
-                    {streamingText}
-                    <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-agent-caret bg-agent-primary align-middle" />
-                  </>
-                ) : (
-                  <TypingIndicator label="正在思考" />
-                )}
-              </div>
-            </div>
-          ) : null}
-          {detail && !sending && pendingQuestions.length ? (
-            <div className="mb-5 ml-[46px] max-w-[560px] rounded-[12px] bg-[#F0F7FF] p-[18px]">
-              <div className="mb-3 text-xs font-semibold tracking-[0.5px] text-agent-primary">
-                还需要确认（可直接在此回答，或点“批量确认”）
-              </div>
-              <div className="grid gap-2.5">
-                {pendingQuestions.map((question, index) => {
-                  const key = questionKey(question, index);
-                  return (
-                    <FollowupQuestionCard
-                      key={key}
-                      index={index}
-                      question={questionText(question)}
-                      reason={question.reason ? String(question.reason) : undefined}
-                      value={answers[key] ?? ""}
-                      disabled={confirming}
-                      onChange={(value) => setAnswers((current) => ({ ...current, [key]: value }))}
-                      onMarkNA={() => setAnswers((current) => ({ ...current, [key]: "不适用" }))}
-                    />
-                  );
-                })}
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs text-agent-muted">已填写 {answeredDecisions.length}/{pendingQuestions.length}</span>
-                <button
-                  className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-agent-primary px-4 py-2 text-[13px] font-semibold text-white hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:opacity-60"
-                  type="button"
-                  disabled={confirming || !answeredDecisions.length}
-                  aria-busy={confirming}
-                  onClick={() => void handleConfirmFollowups()}
-                >
-                  {confirming ? <Spinner size={14} className="text-white" /> : null}
-                  {confirming ? "提交中..." : "提交回答"}
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {errorMessage ? <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
-          <div ref={bottomRef} />
+            ) : null}
+            {errorMessage ? <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
+            {detail ? <InlineWorkflowPanel detail={detail} /> : null}
+            <div ref={bottomRef} />
+          </div>
         </div>
 
         <div className="border-t border-agent-divider bg-white px-7 py-4">
-          <div className="flex items-end gap-2.5">
+          <div className="mx-auto flex max-w-[760px] items-end gap-2.5">
             <textarea
               className="agent-input min-h-[42px] flex-1 resize-none rounded-xl px-[18px] py-3 text-sm leading-6"
               placeholder="描述你的想法，或回答上面的问题..."
@@ -258,15 +261,6 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
             />
-            <button
-              className="h-[42px] shrink-0 rounded-[10px] bg-agent-pale px-[18px] text-[13px] font-medium text-agent-primary hover:bg-agent-paleHover disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={!detail || !pendingQuestions.length}
-              title="打开批量确认视图"
-              type="button"
-              onClick={() => navigate("followup")}
-            >
-              批量确认
-            </button>
             <button
               className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[10px] bg-agent-primary text-white hover:bg-agent-primaryHover disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!draft.trim() || sending}
@@ -279,8 +273,6 @@ export function ChatPage({ activeRequirementId, navigate, setActiveRequirementId
           </div>
         </div>
       </section>
-
-      <InlineWorkflowPanel detail={detail} />
     </div>
   );
 }

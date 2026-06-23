@@ -259,15 +259,17 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
   };
 
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col overflow-y-auto border-l border-agent-divider bg-white">
-      <div className="border-b border-agent-divider px-5 py-[18px]">
-        <div className="text-sm font-semibold text-agent-ink">Agent 工作流</div>
-        <div className="mt-0.5 text-xs text-agent-muted">当前需求的草案、调度、监控和评审</div>
+    <div className="mb-5 flex gap-3">
+      <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-agent-ink text-agent-cyan">
+        <Sparkles size={17} />
       </div>
-      <div className="grid gap-3 p-4">
-        {errorMessage ? <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
+      <div className="max-w-[720px] flex-1 rounded-[4px_16px_16px_16px] border border-agent-border bg-white p-5 shadow-[0_1px_4px_rgba(11,18,32,0.04)]">
+        <div className="mb-1 text-sm font-semibold text-agent-ink">我会在这里继续推进 Agent</div>
+        <div className="mb-4 text-xs leading-6 text-agent-muted">草案、开发、监控和评审都会变成这条对话里的操作卡，不需要切换页面。</div>
+        {errorMessage ? <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-agent-danger">{errorMessage}</div> : null}
 
-        <PanelSection icon={<Sparkles size={15} />} title="需求状态">
+        <div className="grid gap-3">
+          <ConversationSection icon={<Sparkles size={15} />} title="需求状态">
           {detail ? (
             <>
               <div className="mb-2 flex items-baseline justify-between">
@@ -285,9 +287,9 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
           ) : (
             <div className="text-xs leading-6 text-agent-muted">创建或选择需求后，这里会显示完整工作流。</div>
           )}
-        </PanelSection>
+          </ConversationSection>
 
-        <PanelSection icon={<FileText size={15} />} title="需求草案">
+          <ConversationSection icon={<FileText size={15} />} title="AgentSpec 草案">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="min-w-0 text-xs leading-6 text-agent-muted">
               {loadingSpec ? "正在读取草案..." : spec ? `v${spec.version} · ${spec.title}` : "尚未生成 AgentSpec"}
@@ -305,9 +307,9 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
               确认
             </AppButton>
           </div>
-        </PanelSection>
+          </ConversationSection>
 
-        <PanelSection icon={<Terminal size={15} />} title="开发调度">
+          <ConversationSection icon={<Terminal size={15} />} title="开发调度">
           <div className="mb-3 grid grid-cols-3 gap-2">
             {strategies.map((item) => {
               const active = strategy === item.value;
@@ -332,9 +334,9 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
             <Play size={14} />
             {job ? "启动新一轮开发" : "开始真实开发"}
           </AppButton>
-        </PanelSection>
+          </ConversationSection>
 
-        <PanelSection icon={<Circle size={15} />} title="并行监控">
+          <ConversationSection icon={<Circle size={15} />} title="运行监控">
           {job ? (
             <>
               <div className="mb-2 flex items-center justify-between">
@@ -362,9 +364,9 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
           ) : (
             <div className="text-xs leading-6 text-agent-muted">启动开发任务后，这里会显示 Runner 状态、进度和最近事件。</div>
           )}
-        </PanelSection>
+          </ConversationSection>
 
-        <PanelSection icon={<ShieldCheck size={15} />} title="自动评审">
+          <ConversationSection icon={<ShieldCheck size={15} />} title="自动评审">
           {review ? (
             <>
               <div className="mb-2 flex items-center justify-between">
@@ -381,15 +383,16 @@ export function InlineWorkflowPanel({ detail }: InlineWorkflowPanelProps) {
               </AppButton>
             </>
           )}
-        </PanelSection>
+          </ConversationSection>
+        </div>
       </div>
-    </aside>
+    </div>
   );
 }
 
-function PanelSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+function ConversationSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-agent-border bg-white p-4 shadow-agent-sm">
+    <section className="rounded-xl border border-agent-border bg-[#FAFCFE] p-4">
       <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-agent-ink">
         <span className="grid h-7 w-7 place-items-center rounded-lg bg-agent-pale text-agent-primary">{icon}</span>
         {title}
