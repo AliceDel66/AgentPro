@@ -23,10 +23,7 @@ from app.db.models import (
 )
 from app.db.session import get_db_session
 from app.modules.auth.router import get_current_user
-from app.modules.requirements.ai_service import (
-    run_ai_requirement_graph,
-    stream_ai_requirement_message,
-)
+from app.modules.requirements.ai_service import run_ai_requirement_graph
 from app.modules.requirements.graph import (
     RequirementGraphState,
     confirmed_decision_keys,
@@ -468,79 +465,22 @@ async def stream_requirement_answer(
     confirmed_decisions: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[str]:
     decisions = confirmed_decisions or await load_decisions(session, requirement.id)
-    messages = [
-        {"role": message.role, "content": message.content}
-        for message in await load_messages(session, requirement.id)
-    ]
-    assistant_parts: list[str] = []
-    stream_error: Exception | None = None
-
-    try:
-        async for token in stream_ai_requirement_message(
-            session,
-            current_user.id,
-            requirement.title,
-            messages,
-            confirmed_decisions=decisions,
-        ):
-            assistant_parts.append(token)
-            yield sse_event("token", {"content": token})
-    except Exception as exc:
-        stream_error = exc
-        logger.warning(
-            "Requirement AI stream failed, falling back to rules: %s",
-            exc.__class__.__name__,
-        )
-
-    assistant_text = "".join(assistant_parts).strip()
-    if assistant_text:
-        # Derive the structured state (followups / specDraft / safety) from real AI too —
-        # not the rules template — so the questions reflect the user's actual scenario and
-        # AgentSpec is AI-authored. Fall back to rules only when the AI call is unavailable.
-        graph_state = None
-        if not stream_error:
-            try:
-                graph_state = await run_ai_requirement_graph(
-                    session,
-                    current_user.id,
-                    requirement.title,
-                    messages,
-                    confirmed_decisions=decisions,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Requirement AI structured graph failed after stream: %s",
-                    exc.__class__.__name__,
-                )
-        if graph_state is None:
-            graph_state = run_requirement_graph(messages, confirmed_decisions=decisions)
-        graph_state["assistantMessage"] = assistant_text
-        graph_state["model"] = "stream"
-        graph_state["aiResponseFormat"] = "stream_text"
-        graph_name = "AIStreamRequirementGraph"
-        if stream_error:
-            suffix = (
-                "\n\n模型流式响应中断，我已保留已收到的内容。"
-                "你可以继续补充需求，系统会重新整理。"
-            )
-            graph_state["assistantMessage"] = f"{assistant_text}{suffix}"
-            graph_state["aiStreamInterrupted"] = True
-            async for token in stream_text_chunks(suffix):
-                yield sse_event("token", {"content": token})
-            assistant_text = graph_state["assistantMessage"]
-    else:
-        graph_state = run_requirement_graph(messages, confirmed_decisions=decisions)
-        graph_name = "RequirementGraph"
-        assistant_text = assistant_followup_text(graph_state)
-        async for token in stream_text_chunks(assistant_text):
-            yield sse_event("token", {"content": token})
+    graph_state, graph_name = await process_requirement_graph(
+        session,
+        requirement,
+        current_user,
+        confirmed_decisions=decisions,
+    )
+    assistant_text = assistant_followup_text(graph_state)
+    async for token in stream_text_chunks(assistant_text):
+        yield sse_event("token", {"content": token})
 
     session.add(
         ConversationMessage(
             requirement_id=requirement.id,
             role="assistant",
             content=assistant_text,
-            message_metadata={"graph": graph_name, "streamed": True},
+            message_metadata={"graph": graph_name, "streamed": True, "singleStructuredPass": True},
         )
     )
     graph_run = await persist_graph_run(session, requirement, graph_state, graph_name)

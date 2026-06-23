@@ -4,6 +4,9 @@ import { listRequirements, renameRequirement, trashRequirement } from "../../ser
 import type { AgentRequirement } from "../../services/types";
 import type { AppRoute, Navigate } from "../../types";
 
+const REQUIREMENTS_CHANGED_EVENT = "agentpro:requirements-changed";
+let cachedRequirements: AgentRequirement[] | null = null;
+
 interface RequirementSidebarProps {
   navigate?: Navigate;
   activeRequirementId?: string | null;
@@ -23,7 +26,7 @@ function statusLabel(status: string) {
 }
 
 export function RequirementSidebar({ activeRequirementId, navigate, setActiveRequirementId }: RequirementSidebarProps) {
-  const [requirements, setRequirements] = useState<AgentRequirement[]>([]);
+  const [requirements, setRequirements] = useState<AgentRequirement[]>(cachedRequirements ?? []);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [actionId, setActionId] = useState<string | null>(null);
@@ -34,6 +37,7 @@ export function RequirementSidebar({ activeRequirementId, navigate, setActiveReq
     async function loadRequirements() {
       try {
         const result = await listRequirements();
+        cachedRequirements = result.data;
         if (!cancelled) setRequirements(result.data);
       } catch {
         if (!cancelled) {
@@ -44,10 +48,12 @@ export function RequirementSidebar({ activeRequirementId, navigate, setActiveReq
     }
 
     void loadRequirements();
+    window.addEventListener(REQUIREMENTS_CHANGED_EVENT, loadRequirements);
     return () => {
       cancelled = true;
+      window.removeEventListener(REQUIREMENTS_CHANGED_EVENT, loadRequirements);
     };
-  }, [activeRequirementId]);
+  }, []);
 
   const beginRename = (item: AgentRequirement) => {
     setEditingId(item.id);
@@ -70,6 +76,7 @@ export function RequirementSidebar({ activeRequirementId, navigate, setActiveReq
       setRequirements((current) =>
         current.map((item) => (item.id === editingId ? { ...item, title: result.data.title } : item))
       );
+      cachedRequirements = (cachedRequirements ?? []).map((item) => (item.id === editingId ? { ...item, title: result.data.title } : item));
       cancelRename();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "重命名失败");
@@ -86,6 +93,7 @@ export function RequirementSidebar({ activeRequirementId, navigate, setActiveReq
     try {
       await trashRequirement(item.id);
       setRequirements((current) => current.filter((row) => row.id !== item.id));
+      cachedRequirements = (cachedRequirements ?? []).filter((row) => row.id !== item.id);
       if (item.id === activeRequirementId) {
         setActiveRequirementId?.(null);
         navigate?.("chat");
@@ -132,11 +140,24 @@ export function RequirementSidebar({ activeRequirementId, navigate, setActiveReq
             const editing = editingId === item.id;
             return (
               <div
-                className={`group mb-1 rounded-lg px-3 py-[11px] ${active ? "bg-agent-pale" : "hover:bg-agent-bg"}`}
+                className={`group mb-1 cursor-pointer rounded-lg px-3 py-[11px] ${active ? "bg-agent-pale" : "hover:bg-agent-bg"}`}
                 key={item.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setActiveRequirementId?.(item.id);
+                  navigate?.("chat");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setActiveRequirementId?.(item.id);
+                    navigate?.("chat");
+                  }
+                }}
               >
                 {editing ? (
-                  <div className="mb-2 flex items-center gap-1.5">
+                  <div className="mb-2 flex items-center gap-1.5" onClick={(event) => event.stopPropagation()}>
                     <input
                       className="min-w-0 flex-1 rounded-md border border-agent-border bg-white px-2 py-1 text-[12px] text-agent-ink outline-none focus:border-agent-primary"
                       value={editingTitle}
@@ -144,6 +165,7 @@ export function RequirementSidebar({ activeRequirementId, navigate, setActiveReq
                       onKeyDown={(event) => {
                         if (event.key === "Enter") void submitRename();
                         if (event.key === "Escape") cancelRename();
+                        event.stopPropagation();
                       }}
                       autoFocus
                     />
@@ -159,7 +181,8 @@ export function RequirementSidebar({ activeRequirementId, navigate, setActiveReq
                     <button
                       className={`min-w-0 flex-1 truncate text-left text-[13px] ${active ? "font-medium text-agent-primary" : "text-agent-secondary"}`}
                       type="button"
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation();
                         setActiveRequirementId?.(item.id);
                         navigate?.("chat");
                       }}
@@ -170,7 +193,10 @@ export function RequirementSidebar({ activeRequirementId, navigate, setActiveReq
                       className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-agent-subtle opacity-0 hover:bg-white hover:text-agent-primary group-hover:opacity-100"
                       title="重命名"
                       type="button"
-                      onClick={() => beginRename(item)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        beginRename(item);
+                      }}
                     >
                       <Pencil size={13} />
                     </button>
@@ -179,7 +205,10 @@ export function RequirementSidebar({ activeRequirementId, navigate, setActiveReq
                       disabled={actionId === item.id}
                       title="移入垃圾篓"
                       type="button"
-                      onClick={() => void handleTrash(item)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleTrash(item);
+                      }}
                     >
                       <Trash2 size={13} />
                     </button>

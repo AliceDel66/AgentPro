@@ -27,7 +27,12 @@ SYSTEM_PROMPT = """你是 AgentPro 的需求访谈与 Agent 架构助手。
   "summary": "对当前需求的一段简明中文摘要",
   "gaps": ["target_users", "tools", "permissions", "success_metrics"],
   "followupQuestions": [
-    {"key": "target_users", "question": "需要用户回答的问题", "reason": "为什么需要确认"}
+    {
+      "key": "target_users",
+      "question": "需要用户回答的问题",
+      "reason": "为什么需要确认",
+      "options": ["推荐选项 A", "推荐选项 B", "不适用"]
+    }
   ],
   "decisions": [{"key": "scope", "value": "已形成的结论", "confirmed": false}],
   "specDraft": {
@@ -45,6 +50,9 @@ SYSTEM_PROMPT = """你是 AgentPro 的需求访谈与 Agent 架构助手。
 规则:
 - 优先用中文回答。
 - assistantMessage 和 followupQuestions 必须结合用户给出的真实场景、对象、任务和行业名词。
+- assistantMessage 中提出的问题必须与 followupQuestions 一一对应；
+  不要在 assistantMessage 中追问未写入 followupQuestions 的问题。
+- 每个 followupQuestion 必须给出 2-4 个可直接点击的 options，最后可以包含“不适用”。
 - 不允许机械套用“目标用户/工具/权限/指标/兜底”模板；每个问题都要写出它与当前场景的关系。
 - 不要编造用户没有给出的业务事实；不确定时放入 followupQuestions。
 - confirmedDecisions 中 confirmed=true 的 key 视为用户已经回答；
@@ -223,11 +231,11 @@ def string_list(value: Any, limit: int = 12) -> list[str]:
     return items[:limit]
 
 
-def normalize_followups(value: Any) -> list[dict[str, str]]:
+def normalize_followups(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
 
-    followups: list[dict[str, str]] = []
+    followups: list[dict[str, Any]] = []
     for index, item in enumerate(value[:8], start=1):
         if not isinstance(item, dict):
             continue
@@ -236,7 +244,17 @@ def normalize_followups(value: Any) -> list[dict[str, str]]:
             continue
         key = str(item.get("key") or f"question_{index}").strip()
         reason = str(item.get("reason") or "补齐开发和评审所需约束").strip()
-        followups.append({"key": key, "question": question, "reason": reason})
+        options = string_list(item.get("options"), limit=4)
+        if "不适用" not in options:
+            options.append("不适用")
+        followups.append(
+            {
+                "key": key,
+                "question": question,
+                "reason": reason,
+                "options": options[:4],
+            }
+        )
     return followups
 
 
@@ -302,7 +320,7 @@ def normalize_spec_draft(
     value: Any,
     title: str,
     summary: str,
-    followups: list[dict[str, str]],
+    followups: list[dict[str, Any]],
     decisions: list[dict[str, Any]],
 ) -> dict[str, Any]:
     draft = value if isinstance(value, dict) else {}
@@ -324,7 +342,7 @@ def normalize_spec_draft(
 
 
 def followup_message_from_remaining(
-    raw_followups: list[dict[str, str]],
+    raw_followups: list[dict[str, Any]],
     followups: list[dict[str, Any]],
     assistant_message: str,
 ) -> str:

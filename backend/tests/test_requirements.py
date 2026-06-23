@@ -323,10 +323,6 @@ async def test_requirement_stream_uses_ai_structured_followups(
         },
     )
 
-    async def fake_stream(*args, **kwargs):
-        for token in ["我", "来", "确认", "几个", "关键点"]:
-            yield token
-
     async def fake_chat_completion(base_url, api_key, model, messages):
         # Distinctive AI followup key the rules template never produces.
         return json.dumps(
@@ -339,6 +335,7 @@ async def test_requirement_stream_uses_ai_structured_followups(
                         "key": "live_catalog",
                         "question": "主播带货时只覆盖美妆类目还是全品类？",
                         "reason": "界定脚本范围",
+                        "options": ["只覆盖美妆类目", "覆盖全品类", "不适用"],
                     }
                 ],
                 "decisions": [],
@@ -354,9 +351,7 @@ async def test_requirement_stream_uses_ai_structured_followups(
             ensure_ascii=False,
         )
 
-    router_module = import_module("app.modules.requirements.router")
     ai_module = import_module("app.modules.requirements.ai_service")
-    monkeypatch.setattr(router_module, "stream_ai_requirement_message", fake_stream)
     monkeypatch.setattr(ai_module, "call_openai_chat_completion", fake_chat_completion)
 
     async with api_client.stream(
@@ -372,6 +367,11 @@ async def test_requirement_stream_uses_ai_structured_followups(
     detail = [payload for event, payload in events if event == "detail"][-1]
     followup_keys = [item["key"] for item in detail["followupQuestions"]]
     assert "live_catalog" in followup_keys  # AI structure, not the rules template keys
+    live_catalog = next(
+        item for item in detail["followupQuestions"] if item["key"] == "live_catalog"
+    )
+    assert live_catalog["options"] == ["只覆盖美妆类目", "覆盖全品类", "不适用"]
+    assert detail["messages"][-1]["content"] == "结构化分析"
     assert all(
         key not in followup_keys for key in ("target_users", "tools", "permissions")
     )
