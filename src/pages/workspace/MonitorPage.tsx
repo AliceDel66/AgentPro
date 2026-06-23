@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Check, Circle, Inbox } from "lucide-react";
+import { Check, Circle, Inbox, XCircle } from "lucide-react";
 import { AppButton } from "../../components/common/Button";
 import { LoadingState } from "../../components/common/LoadingState";
 import { StatusChip } from "../../components/common/StatusChip";
 import { TERMINAL_JOB_STATUSES } from "../../lib/workflow";
+import { cancelRunnerJobOnDesktop } from "../../services/localRunnerService";
 import { getRunnerEvents, getRunnerJob } from "../../services/runnerService";
 import type { RunnerEvent, RunnerJob } from "../../services/types";
 import type { Navigate } from "../../types";
@@ -21,6 +22,7 @@ export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobS
   const [job, setJob] = useState<RunnerJob | null>(null);
   const [events, setEvents] = useState<RunnerEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,6 +79,28 @@ export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobS
   const displayStatus = displayJobStatus(job?.status, events, loading);
   const engines = job?.engines ?? [];
   const canViewReview = Boolean(displayStatus && TERMINAL_JOB_STATUSES.has(displayStatus));
+  const canCancel = Boolean(job && !TERMINAL_JOB_STATUSES.has(displayStatus));
+
+  const handleCancel = async () => {
+    if (!activeJobId || !canCancel || cancelling) return;
+    setCancelling(true);
+    setErrorMessage(null);
+    try {
+      await cancelRunnerJobOnDesktop(activeJobId, engines);
+      setActiveJobStatus("blocked");
+      const [jobResult, eventResult] = await Promise.all([
+        getRunnerJob(activeJobId),
+        getRunnerEvents(activeJobId).catch(() => ({ ok: true, data: [] as RunnerEvent[] }))
+      ]);
+      setJob(jobResult.data);
+      setEvents(eventResult.data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "取消本机 Runner 失败";
+      setErrorMessage(message);
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   if (!activeJobId) {
     return (
@@ -161,6 +185,12 @@ export function MonitorPage({ activeJobId, activeSpecId, navigate, setActiveJobS
         <div className="mt-7 flex justify-end gap-3">
           <AppButton type="button" variant="secondary" onClick={() => navigate("dispatch")}>
             返回调度
+          </AppButton>
+          <AppButton disabled={!canCancel || cancelling} loading={cancelling} type="button" variant="secondary" onClick={() => void handleCancel()}>
+            <span className="inline-flex items-center gap-1.5">
+              <XCircle size={15} />
+              {cancelling ? "取消中..." : "取消执行"}
+            </span>
           </AppButton>
           <AppButton disabled={!canViewReview} type="button" onClick={() => navigate("review")}>
             查看评审报告

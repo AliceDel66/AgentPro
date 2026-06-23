@@ -1,9 +1,17 @@
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::Instant;
+use std::process::{Command, Output, Stdio};
+use std::sync::{Mutex, OnceLock};
+use std::thread;
+use std::time::{Duration, Instant};
+
+const DEFAULT_RUNNER_TIMEOUT_SECONDS: u64 = 1800;
+const RUNNER_POLL_INTERVAL_MS: u64 = 200;
+
+static ACTIVE_RUNNERS: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,6 +35,15 @@ struct RunnerCommand {
 struct RunnerProcess {
     engine: String,
     pid: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RunnerCancelResult {
+    engine: String,
+    cancelled: bool,
+    pid: Option<u32>,
+    message: String,
 }
 
 #[derive(Serialize)]
@@ -69,6 +86,28 @@ struct LocalRunnerResult {
     diff: String,
     delivery_manifest_path: String,
     delivery_manifest: DeliveryManifest,
+}
+
+fn active_runners() -> &'static Mutex<HashMap<String, u32>> {
+    ACTIVE_RUNNERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn active_runner_key(job_id: &str, engine: &str) -> String {
+    format!("{job_id}:{engine}")
+}
+
+fn register_active_runner(job_id: &str, engine: &str, pid: u32) -> Result<(), String> {
+    active_runners()
+        .lock()
+        .map_err(|error| error.to_string())?
+        .insert(active_runner_key(job_id, engine), pid);
+    Ok(())
+}
+
+fn unregister_active_runner(job_id: &str, engine: &str) {
+    if let Ok(mut active) = active_runners().lock() {
+        active.remove(&active_runner_key(job_id, engine));
+    }
 }
 
 fn program_for_engine(engine: &str) -> Result<&'static str, String> {
@@ -245,6 +284,29 @@ fn command_for_engine(engine: &str, program: &str, workdir: &Path) -> Result<Vec
     }
 }
 
+fn wait_with_timeout(
+    mut child: std::process::Child,
+    timeout: Duration,
+) -> Result<(Output, bool), String> {
+    let started = Instant::now();
+    loop {
+        if let Some(_status) = child.try_wait().map_err(|error| error.to_string())? {
+            return child
+                .wait_with_output()
+                .map(|output| (output, false))
+                .map_err(|error| error.to_string());
+        }
+        if started.elapsed() >= timeout {
+            let _ = child.kill();
+            return child
+                .wait_with_output()
+                .map(|output| (output, true))
+                .map_err(|error| error.to_string());
+        }
+        thread::sleep(Duration::from_millis(RUNNER_POLL_INTERVAL_MS));
+    }
+}
+
 fn trim_output(value: String) -> String {
     const LIMIT: usize = 40_000;
     // Count characters, not bytes: slicing by byte index can land mid-UTF-8-char and panic
@@ -290,7 +352,10 @@ fn git_status_files(workdir: &Path) -> (Vec<String>, Vec<String>) {
 }
 
 fn iso_timestamp_utc() -> String {
-    let output = Command::new("date").arg("-u").arg("+%Y-%m-%dT%H:%M:%SZ").output();
+    let output = Command::new("date")
+        .arg("-u")
+        .arg("+%Y-%m-%dT%H:%M:%SZ")
+        .output();
     match output {
         Ok(output) if output.status.success() => {
             String::from_utf8_lossy(&output.stdout).trim().to_string()
@@ -402,7 +467,9 @@ fn select_runner_workspace_root() -> Result<Option<String>, String> {
     }
     let path = PathBuf::from(selected);
     fs::create_dir_all(&path).map_err(|error| error.to_string())?;
-    Ok(Some(path.to_string_lossy().trim_end_matches('/').to_string()))
+    Ok(Some(
+        path.to_string_lossy().trim_end_matches('/').to_string(),
+    ))
 }
 
 #[tauri::command]
@@ -452,6 +519,7 @@ fn execute_agent_runner_blocking(
     prompt: String,
     repo_path: Option<String>,
     workspace_root: Option<String>,
+    timeout_seconds: Option<u64>,
 ) -> Result<LocalRunnerResult, String> {
     let program = resolve_program(&engine)?;
     let workdir = prepare_local_workspace(&job_id, &engine, repo_path, workspace_root)?;
@@ -468,30 +536,47 @@ fn execute_agent_runner_blocking(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| error.to_string())?;
+    register_active_runner(&job_id, &engine, child.id())?;
 
     if let Some(stdin) = child.stdin.as_mut() {
-        stdin
-            .write_all(prompt.as_bytes())
-            .map_err(|error| error.to_string())?;
+        if let Err(error) = stdin.write_all(prompt.as_bytes()) {
+            unregister_active_runner(&job_id, &engine);
+            let _ = child.kill();
+            return Err(error.to_string());
+        }
     }
 
-    let output = child
-        .wait_with_output()
-        .map_err(|error| error.to_string())?;
+    let timeout = Duration::from_secs(timeout_seconds.unwrap_or(DEFAULT_RUNNER_TIMEOUT_SECONDS));
+    let wait_result = wait_with_timeout(child, timeout);
+    unregister_active_runner(&job_id, &engine);
+    let (output, timed_out) = wait_result?;
     let duration = started.elapsed().as_secs_f64();
     let diff_stat = run_git_capture(&workdir, &["diff", "--stat"]);
     let diff = run_git_capture(&workdir, &["diff"]);
     let delivery_manifest = build_delivery_manifest(&job_id, &engine, &workdir);
     let delivery_manifest_path = workdir.join("agentpro-delivery.json");
-    let delivery_manifest_json = serde_json::to_string_pretty(&delivery_manifest)
+    let delivery_manifest_json =
+        serde_json::to_string_pretty(&delivery_manifest).map_err(|error| error.to_string())?;
+    fs::write(&delivery_manifest_path, delivery_manifest_json)
         .map_err(|error| error.to_string())?;
-    fs::write(&delivery_manifest_path, delivery_manifest_json).map_err(|error| error.to_string())?;
 
     Ok(LocalRunnerResult {
         engine,
-        exit_code: output.status.code().unwrap_or(-1),
+        exit_code: if timed_out {
+            124
+        } else {
+            output.status.code().unwrap_or(-1)
+        },
         stdout: trim_output(String::from_utf8_lossy(&output.stdout).to_string()),
-        stderr: trim_output(String::from_utf8_lossy(&output.stderr).to_string()),
+        stderr: trim_output(if timed_out {
+            format!(
+                "Runner command timed out after {} seconds\n{}",
+                timeout.as_secs(),
+                String::from_utf8_lossy(&output.stderr)
+            )
+        } else {
+            String::from_utf8_lossy(&output.stderr).to_string()
+        }),
         workdir: workdir.to_string_lossy().to_string(),
         prompt_path: prompt_path.to_string_lossy().to_string(),
         duration_seconds: (duration * 100.0).round() / 100.0,
@@ -510,12 +595,55 @@ async fn execute_agent_runner(
     prompt: String,
     repo_path: Option<String>,
     workspace_root: Option<String>,
+    timeout_seconds: Option<u64>,
 ) -> Result<LocalRunnerResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        execute_agent_runner_blocking(engine, job_id, prompt, repo_path, workspace_root)
+        execute_agent_runner_blocking(
+            engine,
+            job_id,
+            prompt,
+            repo_path,
+            workspace_root,
+            timeout_seconds,
+        )
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn cancel_agent_runner(job_id: String, engine: String) -> Result<RunnerCancelResult, String> {
+    let pid = {
+        active_runners()
+            .lock()
+            .map_err(|error| error.to_string())?
+            .get(&active_runner_key(&job_id, &engine))
+            .copied()
+    };
+    let Some(pid) = pid else {
+        return Ok(RunnerCancelResult {
+            engine,
+            cancelled: false,
+            pid: None,
+            message: "没有正在运行的本机 Runner 进程。".to_string(),
+        });
+    };
+
+    let status = Command::new("/bin/kill")
+        .arg("-TERM")
+        .arg(pid.to_string())
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        Ok(RunnerCancelResult {
+            engine,
+            cancelled: true,
+            pid: Some(pid),
+            message: "已发送取消信号。".to_string(),
+        })
+    } else {
+        Err(format!("取消 Runner 失败，退出码：{}", status))
+    }
 }
 
 pub fn run() {
@@ -527,7 +655,8 @@ pub fn run() {
             select_runner_workspace_root,
             build_agent_runner_command,
             start_agent_runner,
-            execute_agent_runner
+            execute_agent_runner,
+            cancel_agent_runner
         ])
         .run(tauri::generate_context!())
         .expect("error while running AgentPro");
@@ -535,7 +664,9 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::trim_output;
+    use super::{trim_output, wait_with_timeout};
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
 
     #[test]
     fn trim_output_keeps_short_value() {
@@ -552,5 +683,19 @@ mod tests {
         assert!(trimmed.contains("[truncated 5000 chars]"));
         // Result is still valid UTF-8 and retains the truncated prefix.
         assert!(trimmed.starts_with('中'));
+    }
+
+    #[test]
+    fn wait_with_timeout_kills_slow_process() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("sleep 1; printf done")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn test process");
+        let (_output, timed_out) =
+            wait_with_timeout(child, Duration::from_millis(10)).expect("wait with timeout");
+        assert!(timed_out);
     }
 }

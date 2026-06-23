@@ -1,4 +1,5 @@
 import json
+import secrets
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import record_audit
 from app.core.responses import ok
+from app.core.security import create_refresh_token, hash_secret
 from app.db.models import AgentSpec, DevJob, DevJobArtifact, DevJobEvent, Requirement, User
 from app.db.session import async_session_factory, get_db_session
 from app.modules.auth.router import get_current_user
@@ -44,6 +46,7 @@ JOB_STATUS_TRANSITIONS: dict[str, set[str]] = {
 }
 DESKTOP_RUNNER_ID_PREFIX = "agentpro-desktop"
 DESKTOP_RUNNER_STALE_TIMEOUT = timedelta(seconds=90)
+RUNNER_LEASE_RENEWAL = timedelta(minutes=5)
 
 
 def session_factory_for_request(request: Request):
@@ -138,6 +141,47 @@ def assert_valid_job_status_transition(current: str, target: str) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail=f"非法的任务状态流转：{current} -> {target}",
         )
+
+
+def event_requires_runner_lease(body: DevJobEventCreate) -> bool:
+    # Browser-only attempts still need to be able to mark the job as blocked with a
+    # readable error before a desktop lease exists. Every real runner evidence event
+    # must be tied to the active lease.
+    return not (body.status == "blocked" and body.phase == "desktop.runner.blocked")
+
+
+def assert_active_runner_lease(
+    job: DevJob,
+    *,
+    runner_id: str | None,
+    lease_token: str | None,
+) -> None:
+    now = datetime.now(UTC)
+    lease_expires_at = ensure_utc(job.lease_expires_at)
+    if not job.lease_owner or not job.lease_token_hash or not lease_expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Runner lease required before submitting job evidence",
+        )
+    if lease_expires_at <= now:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Runner lease expired",
+        )
+    if runner_id != job.lease_owner or not lease_token:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Runner lease mismatch",
+        )
+    if not secrets.compare_digest(hash_secret(lease_token), job.lease_token_hash):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Runner lease mismatch",
+        )
+
+    renewed_until = now + RUNNER_LEASE_RENEWAL
+    if lease_expires_at < renewed_until:
+        job.lease_expires_at = renewed_until
 
 
 async def resolve_owned_targets(
@@ -329,16 +373,31 @@ async def lease_dev_job(
 ):
     job = await get_owned_job(job_id, session, current_user)
     now = datetime.now(UTC)
-    if job.lease_owner and job.lease_expires_at and job.lease_expires_at > now:
+    current_lease_expires_at = ensure_utc(job.lease_expires_at)
+    if job.status in TERMINAL_JOB_STATUSES:
         return ok(
             DevJobLeaseResponse(
                 leased=False,
                 leaseOwner=job.lease_owner,
-                leaseExpiresAt=job.lease_expires_at.isoformat(),
+                leaseExpiresAt=(
+                    current_lease_expires_at.isoformat() if current_lease_expires_at else None
+                ),
+                leaseToken=None,
+            )
+        )
+    if job.lease_owner and current_lease_expires_at and current_lease_expires_at > now:
+        return ok(
+            DevJobLeaseResponse(
+                leased=False,
+                leaseOwner=job.lease_owner,
+                leaseExpiresAt=current_lease_expires_at.isoformat(),
+                leaseToken=None,
             )
         )
 
+    lease_token = create_refresh_token()
     job.lease_owner = body.runnerId
+    job.lease_token_hash = hash_secret(lease_token)
     job.lease_expires_at = now + timedelta(seconds=body.leaseSeconds)
     job.status = "running"
     await session.commit()
@@ -347,6 +406,7 @@ async def lease_dev_job(
             leased=True,
             leaseOwner=job.lease_owner,
             leaseExpiresAt=job.lease_expires_at.isoformat(),
+            leaseToken=lease_token,
         )
     )
 
@@ -359,9 +419,17 @@ async def append_dev_job_event(
     current_user: User = current_user_dependency,
 ):
     job = await get_owned_job(job_id, session, current_user)
+    if event_requires_runner_lease(body):
+        assert_active_runner_lease(
+            job,
+            runner_id=body.runnerId,
+            lease_token=body.leaseToken,
+        )
     if body.status:
         assert_valid_job_status_transition(job.status, body.status)
     payload = dict(body.payload)
+    if body.runnerId:
+        payload["runnerId"] = body.runnerId
     if body.progress is not None:
         payload["progress"] = body.progress
     if body.status:
@@ -390,6 +458,11 @@ async def append_dev_job_artifact(
     current_user: User = current_user_dependency,
 ):
     job = await get_owned_job(job_id, session, current_user)
+    assert_active_runner_lease(
+        job,
+        runner_id=body.runnerId,
+        lease_token=body.leaseToken,
+    )
     artifact = DevJobArtifact(
         job_id=job.id,
         engine=body.engine,

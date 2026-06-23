@@ -34,18 +34,45 @@ async def create_owned_spec(client: AsyncClient, headers: dict[str, str]) -> str
     return spec_response.json()["data"]["id"]
 
 
+async def lease_job(
+    client: AsyncClient,
+    headers: dict[str, str],
+    job_id: str,
+    runner_id: str = "agentpro-desktop-review",
+) -> dict[str, str]:
+    lease_response = await client.post(
+        f"/api/v1/dev-jobs/{job_id}/lease",
+        headers=headers,
+        json={"runnerId": runner_id, "leaseSeconds": 1800},
+    )
+    assert lease_response.status_code == 200
+    lease = lease_response.json()["data"]
+    assert lease["leased"] is True
+    assert lease["leaseToken"]
+    return {"runnerId": runner_id, "leaseToken": lease["leaseToken"]}
+
+
 async def drive_job_terminal(
-    client: AsyncClient, headers: dict[str, str], job_id: str, *, status: str = "completed"
+    client: AsyncClient,
+    headers: dict[str, str],
+    job_id: str,
+    *,
+    status: str = "completed",
+    lease: dict[str, str] | None = None,
 ) -> None:
     """Move a job to a terminal state via the legitimate lease -> running -> done flow,
     so a review can be generated against it."""
-    await client.post(
-        f"/api/v1/dev-jobs/{job_id}/lease", headers=headers, json={"runnerId": "desktop-local"}
-    )
+    lease = lease or await lease_job(client, headers, job_id)
     await client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
-        json={"phase": "done", "message": "runner finished", "status": status, "progress": 100},
+        json={
+            **lease,
+            "phase": "done",
+            "message": "runner finished",
+            "status": status,
+            "progress": 100,
+        },
     )
 
 
@@ -58,15 +85,17 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
         json={"strategy": "codex", "specId": spec_id},
     )
     job_id = job_response.json()["data"]["id"]
+    lease = await lease_job(api_client, headers, job_id)
     await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
-        json={"phase": "tests", "message": "pytest passed", "progress": 95},
+        json={**lease, "phase": "tests", "message": "pytest passed", "progress": 95},
     )
     await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/artifacts",
         headers=headers,
         json={
+            **lease,
             "engine": "codex",
             "kind": "run-log",
             "summary": "codex run completed",
@@ -83,6 +112,7 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
         f"/api/v1/dev-jobs/{job_id}/artifacts",
         headers=headers,
         json={
+            **lease,
             "engine": "codex",
             "kind": "diff-summary",
             "summary": "src/app.py | 4 ++--",
@@ -93,6 +123,7 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
         f"/api/v1/dev-jobs/{job_id}/artifacts",
         headers=headers,
         json={
+            **lease,
             "engine": "codex",
             "kind": "test-report",
             "summary": "pytest passed",
@@ -103,6 +134,7 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
         f"/api/v1/dev-jobs/{job_id}/artifacts",
         headers=headers,
         json={
+            **lease,
             "engine": "codex",
             "kind": "delivery-manifest",
             "summary": "本次产物是 AgentPro 源码补丁，而不是独立安装包。",
@@ -129,7 +161,7 @@ async def test_review_report_accept_and_rework(api_client: AsyncClient) -> None:
             },
         },
     )
-    await drive_job_terminal(api_client, headers, job_id)
+    await drive_job_terminal(api_client, headers, job_id, lease=lease)
 
     review_response = await api_client.post(
         "/api/v1/reviews",
@@ -321,12 +353,24 @@ async def test_review_optimize_creates_source_review_job_for_desktop_runner(
         json={"strategy": "codex", "specId": spec_id},
     )
     job_id = job_response.json()["data"]["id"]
+    lease = await lease_job(api_client, headers, job_id)
     await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
-        json={"phase": "tests", "message": "pytest missing retry coverage", "progress": 60},
+        json={
+            **lease,
+            "phase": "tests",
+            "message": "pytest missing retry coverage",
+            "progress": 60,
+        },
     )
-    await drive_job_terminal(api_client, headers, job_id, status="completed_with_warnings")
+    await drive_job_terminal(
+        api_client,
+        headers,
+        job_id,
+        status="completed_with_warnings",
+        lease=lease,
+    )
     created = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
     review_id = created.json()["data"]["id"]
 

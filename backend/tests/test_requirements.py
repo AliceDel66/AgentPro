@@ -581,15 +581,22 @@ async def test_requirement_list_includes_latest_workflow_summaries(
         json={"strategy": "codex", "specId": spec_id},
     )
     job_id = job_response.json()["data"]["id"]
-    await api_client.post(
+    lease_response = await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/lease",
         headers=headers,
-        json={"runnerId": "desktop-local"},
+        json={"runnerId": "agentpro-desktop-requirements", "leaseSeconds": 1800},
     )
+    lease = lease_response.json()["data"]
+    assert lease["leaseToken"]
+    lease_payload = {
+        "runnerId": "agentpro-desktop-requirements",
+        "leaseToken": lease["leaseToken"],
+    }
     await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
         json={
+            **lease_payload,
             "phase": "desktop.runner.complete",
             "message": "Codex CLI 已完成开发。",
             "progress": 100,
@@ -600,6 +607,7 @@ async def test_requirement_list_includes_latest_workflow_summaries(
         f"/api/v1/dev-jobs/{job_id}/artifacts",
         headers=headers,
         json={
+            **lease_payload,
             "engine": "codex",
             "kind": "run-log",
             "summary": "codex completed",

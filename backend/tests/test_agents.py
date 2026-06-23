@@ -15,6 +15,18 @@ async def register_headers(client: AsyncClient, email: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {register.json()['data']['accessToken']}"}
 
 
+async def lease_job(client: AsyncClient, headers: dict[str, str], job_id: str) -> dict[str, str]:
+    runner_id = "agentpro-desktop-agents"
+    lease = await client.post(
+        f"/api/v1/dev-jobs/{job_id}/lease",
+        headers=headers,
+        json={"runnerId": runner_id, "leaseSeconds": 1800},
+    )
+    data = lease.json()["data"]
+    assert data["leaseToken"]
+    return {"runnerId": runner_id, "leaseToken": data["leaseToken"]}
+
+
 async def deliver_agent(
     client: AsyncClient, headers: dict[str, str], title: str, message: str
 ) -> tuple[str, str]:
@@ -31,13 +43,11 @@ async def deliver_agent(
         "/api/v1/dev-jobs", headers=headers, json={"strategy": "codex", "specId": spec_id}
     )
     job_id = job.json()["data"]["id"]
-    await client.post(
-        f"/api/v1/dev-jobs/{job_id}/lease", headers=headers, json={"runnerId": "desktop-local"}
-    )
+    lease = await lease_job(client, headers, job_id)
     await client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
-        json={"phase": "done", "message": "done", "status": "completed", "progress": 100},
+        json={**lease, "phase": "done", "message": "done", "status": "completed", "progress": 100},
     )
     review = await client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
     review_id = review.json()["data"]["id"]
@@ -67,13 +77,11 @@ async def test_list_delivered_agents_after_accepted_review(api_client: AsyncClie
         "/api/v1/dev-jobs", headers=headers, json={"strategy": "codex", "specId": spec_id}
     )
     job_id = job.json()["data"]["id"]
-    await api_client.post(
-        f"/api/v1/dev-jobs/{job_id}/lease", headers=headers, json={"runnerId": "desktop-local"}
-    )
+    lease = await lease_job(api_client, headers, job_id)
     await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
-        json={"phase": "done", "message": "done", "status": "completed", "progress": 100},
+        json={**lease, "phase": "done", "message": "done", "status": "completed", "progress": 100},
     )
     review = await api_client.post("/api/v1/reviews", headers=headers, json={"jobId": job_id})
     review_id = review.json()["data"]["id"]

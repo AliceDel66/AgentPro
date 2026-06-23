@@ -49,9 +49,12 @@ class DevJobLeaseResponse(BaseModel):
     leased: bool
     leaseOwner: str | None
     leaseExpiresAt: str | None
+    leaseToken: str | None = None
 
 
 class DevJobEventCreate(BaseModel):
+    runnerId: str | None = Field(default=None, min_length=1, max_length=120)
+    leaseToken: str | None = Field(default=None, min_length=1, max_length=160)
     level: Literal["debug", "info", "warning", "error"] = "info"
     phase: str = Field(min_length=1, max_length=80)
     message: str = Field(min_length=1)
@@ -72,6 +75,8 @@ RunnerArtifactKind = Literal[
 
 
 class DevJobArtifactCreate(BaseModel):
+    runnerId: str | None = Field(default=None, min_length=1, max_length=120)
+    leaseToken: str | None = Field(default=None, min_length=1, max_length=160)
     engine: Literal["codex", "claude-code"]
     kind: RunnerArtifactKind
     summary: str | None = None

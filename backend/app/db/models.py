@@ -232,6 +232,7 @@ class DevJob(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), default="queued", index=True, nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     lease_owner: Mapped[str | None] = mapped_column(String(120))
+    lease_token_hash: Mapped[str | None] = mapped_column(String(255))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     events: Mapped[list[DevJobEvent]] = relationship(

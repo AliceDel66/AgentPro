@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from "./apiClient";
-import type { RunnerEvent, RunnerJob, RunnerPackage, RunnerRequest } from "./types";
+import type { RunnerEvent, RunnerJob, RunnerLease, RunnerPackage, RunnerRequest } from "./types";
 
 const mockJob: RunnerJob = {
   id: "job_mock_parallel_001",
@@ -40,20 +40,25 @@ export function getRunnerEvents(jobId: string) {
   return apiGet<RunnerEvent[]>(`/dev-jobs/${jobId}/events`, []);
 }
 
-export function leaseRunnerJob(jobId: string, runnerId: string) {
-  return apiPost(`/dev-jobs/${jobId}/lease`, { runnerId }, { leased: true });
+export function leaseRunnerJob(jobId: string, runnerId: string, leaseSeconds = 1800) {
+  return apiPost(`/dev-jobs/${jobId}/lease`, { runnerId, leaseSeconds }, {
+    leased: true,
+    leaseOwner: runnerId,
+    leaseExpiresAt: null,
+    leaseToken: "mock-lease-token"
+  } satisfies RunnerLease);
 }
 
 export function appendRunnerEvent(
   jobId: string,
-  event: { phase: string; message: string; level?: string; progress?: number; status?: string; payload?: Record<string, unknown> }
+  event: { phase: string; message: string; level?: string; progress?: number; status?: string; payload?: Record<string, unknown>; runnerId?: string; leaseToken?: string }
 ) {
   return apiPost(`/dev-jobs/${jobId}/events`, event, mockJob);
 }
 
 export function appendRunnerArtifact(
   jobId: string,
-  artifact: { engine: "codex" | "claude-code"; kind: string; summary?: string; uri?: string; payload?: Record<string, unknown> }
+  artifact: { engine: "codex" | "claude-code"; kind: string; summary?: string; uri?: string; payload?: Record<string, unknown>; runnerId?: string; leaseToken?: string }
 ) {
   return apiPost(`/dev-jobs/${jobId}/artifacts`, artifact, { id: "artifact_mock_001" });
 }

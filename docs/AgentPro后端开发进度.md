@@ -898,3 +898,28 @@
 - Commit：
   - 哈希：本提交
   - 信息：收紧后端自动部署用户与容器端口暴露
+
+### 35. Runner lease-bound evidence 协议
+- 状态：已完成
+- 完成功能：
+  - `dev_jobs` 新增 `lease_token_hash` 字段，并新增 Alembic 迁移 `20260623_0003_runner_lease_token`
+  - Runner 领取任务时返回一次性 `leaseToken`，后端只保存 hash，后续 event/artifact 写入必须同时匹配 `runnerId` 和 `leaseToken`
+  - 后端在 evidence 写入时校验 lease owner、lease token、过期时间和任务终态，校验通过后自动续约短余量 lease
+  - 浏览器缺少本机 Runner 时仍允许写入 `desktop.runner.blocked`，其余 evidence 写入统一要求活跃 lease
+  - 补充 Runner、Review、Requirements、Agents 相关测试，覆盖无 lease、错误 lease token、正常交付链路和内部 Runner 执行链路
+- 相关文件：
+  - backend/app/db/models.py
+  - backend/app/modules/runner/router.py
+  - backend/app/modules/runner/schemas.py
+  - backend/alembic/versions/20260623_0003_runner_lease_token.py
+  - backend/tests/test_runner.py
+  - backend/tests/test_review.py
+  - backend/tests/test_requirements.py
+  - backend/tests/test_agents.py
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 uv lock --check
+- Commit：
+  - 哈希：本提交
+  - 信息：完成桌面 Runner 超时取消与 lease 证据协议

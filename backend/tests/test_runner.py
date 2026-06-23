@@ -43,6 +43,24 @@ async def create_owned_spec(client: AsyncClient, headers: dict[str, str]) -> str
     return spec_response.json()["data"]["id"]
 
 
+async def lease_job(
+    client: AsyncClient,
+    headers: dict[str, str],
+    job_id: str,
+    runner_id: str = "agentpro-desktop-test",
+) -> dict[str, str]:
+    lease_response = await client.post(
+        f"/api/v1/dev-jobs/{job_id}/lease",
+        headers=headers,
+        json={"runnerId": runner_id, "leaseSeconds": 1800},
+    )
+    assert lease_response.status_code == 200
+    lease = lease_response.json()["data"]
+    assert lease["leased"] is True
+    assert lease["leaseToken"]
+    return {"runnerId": runner_id, "leaseToken": lease["leaseToken"]}
+
+
 async def test_runner_job_lease_event_and_artifact(api_client: AsyncClient) -> None:
     headers = await runner_auth_headers(api_client)
     spec_id = await create_owned_spec(api_client, headers)
@@ -57,18 +75,13 @@ async def test_runner_job_lease_event_and_artifact(api_client: AsyncClient) -> N
     assert job["engines"] == ["codex", "claude-code"]
     assert job["status"] == "queued"
 
-    lease_response = await api_client.post(
-        f"/api/v1/dev-jobs/{job['id']}/lease",
-        headers=headers,
-        json={"runnerId": "desktop-local"},
-    )
-    assert lease_response.status_code == 200
-    assert lease_response.json()["data"]["leased"] is True
+    lease = await lease_job(api_client, headers, job["id"])
 
     event_response = await api_client.post(
         f"/api/v1/dev-jobs/{job['id']}/events",
         headers=headers,
         json={
+            **lease,
             "phase": "typecheck",
             "message": "npm run typecheck passed",
             "progress": 45,
@@ -82,6 +95,7 @@ async def test_runner_job_lease_event_and_artifact(api_client: AsyncClient) -> N
         f"/api/v1/dev-jobs/{job['id']}/artifacts",
         headers=headers,
         json={
+            **lease,
             "engine": "codex",
             "kind": "diff-summary",
             "summary": "完成候选实现",
@@ -105,6 +119,44 @@ async def test_runner_job_lease_event_and_artifact(api_client: AsyncClient) -> N
     assert "event: heartbeat" in stream_response.text
 
 
+async def test_runner_evidence_requires_active_lease(api_client: AsyncClient) -> None:
+    headers = await register_headers(api_client, "lease-required@example.com")
+    spec_id = await create_owned_spec(api_client, headers)
+    create_response = await api_client.post(
+        "/api/v1/dev-jobs",
+        headers=headers,
+        json={"strategy": "codex", "specId": spec_id},
+    )
+    job_id = create_response.json()["data"]["id"]
+
+    no_lease_artifact = await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/artifacts",
+        headers=headers,
+        json={
+            "engine": "codex",
+            "kind": "run-log",
+            "summary": "forged",
+            "payload": {"exitCode": 0},
+        },
+    )
+    assert no_lease_artifact.status_code == 409
+
+    lease = await lease_job(api_client, headers, job_id)
+    wrong_token_event = await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/events",
+        headers=headers,
+        json={
+            **lease,
+            "leaseToken": "wrong-token",
+            "phase": "desktop.runner.progress",
+            "message": "伪造心跳",
+            "status": "running",
+            "progress": 10,
+        },
+    )
+    assert wrong_token_event.status_code == 403
+
+
 async def test_desktop_runner_heartbeat_timeout_marks_job_blocked(
     api_client: AsyncClient,
     monkeypatch,
@@ -118,17 +170,13 @@ async def test_desktop_runner_heartbeat_timeout_marks_job_blocked(
     )
     job_id = create_response.json()["data"]["id"]
 
-    lease_response = await api_client.post(
-        f"/api/v1/dev-jobs/{job_id}/lease",
-        headers=headers,
-        json={"runnerId": "agentpro-desktop-local"},
-    )
-    assert lease_response.status_code == 200
+    lease = await lease_job(api_client, headers, job_id, "agentpro-desktop-local")
 
     event_response = await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
         json={
+            **lease,
             "phase": "desktop.runner.progress",
             "message": "桌面端 Runner 心跳",
             "progress": 25,
@@ -258,11 +306,11 @@ async def test_runner_execute_invokes_available_cli(
         json={
             "engine": "codex",
             "kind": "test-report",
-            "summary": "artifact endpoint remains compatible",
+            "summary": "artifact endpoint requires active runner lease",
             "payload": {},
         },
     )
-    assert artifact_response.status_code == 200
+    assert artifact_response.status_code == 409
 
     stream_response = await api_client.get(f"/api/v1/dev-jobs/{job_id}/stream", headers=headers)
     assert "fake codex" in stream_response.text or "执行完成" in stream_response.text
@@ -456,21 +504,33 @@ async def test_event_locks_terminal_job(api_client: AsyncClient) -> None:
     job_id = create_response.json()["data"]["id"]
 
     # Lease moves the job into running, then a completion report is legitimate.
-    await api_client.post(
-        f"/api/v1/dev-jobs/{job_id}/lease", headers=headers, json={"runnerId": "desktop-local"}
-    )
+    lease = await lease_job(api_client, headers, job_id)
     completed = await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
-        json={"phase": "done", "message": "完成", "status": "completed", "progress": 100},
+        json={
+            **lease,
+            "phase": "done",
+            "message": "完成",
+            "status": "completed",
+            "progress": 100,
+        },
     )
     assert completed.status_code == 200
     assert completed.json()["data"]["status"] == "completed"
+
+    duplicate_completion = await api_client.post(
+        f"/api/v1/dev-jobs/{job_id}/events",
+        headers=headers,
+        json={**lease, "phase": "done.audit", "message": "重复完成回执", "status": "completed"},
+    )
+    assert duplicate_completion.status_code == 200
+    assert duplicate_completion.json()["data"]["status"] == "completed"
 
     # Once terminal, the job cannot be reopened via the events API.
     reopen = await api_client.post(
         f"/api/v1/dev-jobs/{job_id}/events",
         headers=headers,
-        json={"phase": "reopen", "message": "重开", "status": "running"},
+        json={**lease, "phase": "reopen", "message": "重开", "status": "running"},
     )
     assert reopen.status_code == 409

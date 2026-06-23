@@ -1045,3 +1045,39 @@
 - Commit：
   - 哈希：本提交
   - 信息：允许桌面端连接远程后端并记录打包验收
+
+### 42. 桌面 Runner 超时/取消与 lease-bound evidence 协议
+- 状态：已完成
+- 完成功能：
+  - 后端 Runner lease 新增 `leaseToken`，数据库仅保存 token hash，事件与 artifact 写入必须携带活跃 lease，避免浏览器或过期执行器伪造 evidence
+  - 保留浏览器端 `desktop.runner.blocked` 兜底事件，用于缺少 Tauri 环境时把任务明确标记为 blocked
+  - 桌面 Runner 执行命令新增默认 30 分钟超时，超时后终止子进程并返回 `exitCode=124`
+  - 桌面端新增任务取消能力，监控页可对运行中的本机 Runner 发起取消，并以 lease-bound event 写回任务状态
+  - 前端 Runner 心跳、事件、artifact 和评审触发均绑定当前 lease，取消后的任务不再自动创建 review
+- 相关文件：
+  - backend/app/db/models.py
+  - backend/app/modules/runner/router.py
+  - backend/app/modules/runner/schemas.py
+  - backend/alembic/versions/20260623_0003_runner_lease_token.py
+  - src-tauri/src/lib.rs
+  - src/services/localRunnerService.ts
+  - src/services/runnerService.ts
+  - src/pages/workspace/MonitorPage.tsx
+  - backend/tests/test_runner.py
+  - backend/tests/test_review.py
+  - backend/tests/test_requirements.py
+  - backend/tests/test_agents.py
+- 验证结果：
+  - 已通过 backend/.venv/bin/python -m pytest backend/tests
+  - 已通过 backend/.venv/bin/python -m ruff check backend/app backend/tests
+  - 已通过 npm run typecheck
+  - 已通过 npm run build
+  - 已通过 cargo fmt --check
+  - 已通过 cargo check
+  - 已通过 cargo test
+  - 已通过 git diff --check
+  - 已通过 uv lock --check
+  - 已通过 npm ci --dry-run --ignore-scripts
+- Commit：
+  - 哈希：本提交
+  - 信息：完成桌面 Runner 超时取消与 lease 证据协议

@@ -120,6 +120,13 @@ export interface RunnerJob {
   sourceReviewId?: string | null;
 }
 
+export interface RunnerLease {
+  leased: boolean;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
+  leaseToken?: string | null;
+}
+
 export interface RunnerPackage {
   id: string;
   strategy: "codex" | "claude-code" | "parallel";
